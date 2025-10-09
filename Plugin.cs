@@ -43,6 +43,7 @@ namespace PowerShenanigans
             Instance = null;
         }
 
+
         private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
         {
             if (!(drop.model.GetComponent<InteractableSpot>() != null) && !(drop.model.GetComponent<InteractableFire>() != null))
