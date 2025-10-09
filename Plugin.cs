@@ -54,7 +54,6 @@ namespace PowerShenanigans
             UnturnedPlayer player = UnturnedPlayer.FromCSteamID((CSteamID)drop.GetServersideData().owner);
             if (player != null)
             {
-
                 Console.WriteLine("[PowerShenanigans] Owner: " + player.DisplayName);
             }
             sendEffectCool(player, drop.model.position, _resources.node_consumer);

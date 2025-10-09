@@ -111,6 +111,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config.cs" />
+    <Compile Include="Nodes\ConsumerNode.cs" />
+    <Compile Include="Nodes\GroupNode.cs" />
+    <Compile Include="Nodes\IElectricNode.cs" />
+    <Compile Include="Nodes\SupplierNode.cs" />
+    <Compile Include="Nodes\SwitchNode.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Resources.cs" />
