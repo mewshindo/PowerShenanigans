@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using HarmonyLib;
 using PowerShenanigans;
 using PowerShenanigans.Nodes;
+using Rocket.Core.Assets;
 using Rocket.Core.Plugins;
 using Rocket.Unturned.Player;
 using SDG.Unturned;
@@ -21,6 +22,9 @@ namespace PowerShenanigans
     {
         public static Plugin Instance;
         public Resources _resources;
+
+        private List<Guid> _ElectricalInspectors = new List<Guid>();
+        private Dictionary<uint, CSteamID> _SelectedNode = new Dictionary<uint, CSteamID>();
 
         private const float traceinterval = 0.25f;
         protected override void Unload()
@@ -49,10 +53,23 @@ namespace PowerShenanigans
 
         private void UseableGun_onBulletHit(UseableGun gun, BulletInfo bullet, InputInfo hit, ref bool shouldAllow)
         {
-            if(hasFlag(gun.equippedGunAsset, "ElectricalInspector"))
+            if (_ElectricalInspectors.Contains(gun.equippedGunAsset.GUID))
             {
                 shouldAllow = false;
+                if (!_SelectedNode.ContainsValue(UnturnedPlayer.FromPlayer(gun.player).CSteamID))
+                {
+
+                }
+                return;
             }
+            if(HasFlag(gun.equippedGunAsset, "ElectricalInspector"))
+            {
+                shouldAllow = false;
+                _ElectricalInspectors.Add(gun.equippedGunAsset.GUID);
+                return;
+            }
+            shouldAllow = true;
+            return;
         }
 
         private void onLevelLoaded(int level)
@@ -256,11 +273,11 @@ namespace PowerShenanigans
         private bool isSwitch(BarricadeDrop drop)
         {
             if(drop == null) return false;
-            if (hasFlag(drop.asset, "Switch"))
+            if (HasFlag(drop.asset, "Switch"))
                 return true;
             return false;
         }
-        private bool hasFlag(Asset asset, string flag)
+        private bool HasFlag(Asset asset, string flag)
         {
             StreamReader reader = File.OpenText(asset.getFilePath());
             string line;

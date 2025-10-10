@@ -118,6 +118,7 @@
     <Compile Include="Nodes\SwitchNode.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Raycast.cs" />
     <Compile Include="Resources.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

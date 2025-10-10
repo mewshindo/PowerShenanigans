@@ -24,15 +24,12 @@ namespace PowerShenanigans.Nodes
     {
         private readonly IReadOnlyCollection<IElectricNode> _children;
         public uint CurrentVoltage { get; private set; }
-
         public uint MaxSupply { get; }
-
         public SupplierNode(uint maxSupply, IReadOnlyCollection<IElectricNode> children)
         {
             MaxSupply = maxSupply;
             _children = children;
         }
-
         public void IncreaseVoltage(uint amount)
         {
             CurrentVoltage = Math.Min(CurrentVoltage + amount, MaxSupply);
@@ -42,7 +39,6 @@ namespace PowerShenanigans.Nodes
                 child.IncreaseVoltage(amount);
             }
         }
-
         public void DecreaseVoltage(uint amount)
         {
             if (CurrentVoltage < amount)
