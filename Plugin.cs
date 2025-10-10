@@ -14,7 +14,6 @@ using Rocket.Unturned.Player;
 using SDG.Unturned;
 using Steamworks;
 using UnityEngine;
-using static SDG.Unturned.GunAttachmentEventHook;
 
 namespace PowerShenanigans
 {
@@ -31,6 +30,7 @@ namespace PowerShenanigans
         {
             Level.onLevelLoaded -= onLevelLoaded;
             BarricadeManager.onBarricadeSpawned -= onBarricadeSpawned;
+            UseableGun.onBulletHit -= UseableGun_onBulletHit;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.UnpatchAll("com.mew.powerShenanigans");
@@ -39,6 +39,7 @@ namespace PowerShenanigans
         protected override void Load()
         {
             Instance = this;
+
             Level.onLevelLoaded += onLevelLoaded;
             BarricadeManager.onBarricadeSpawned += onBarricadeSpawned;
             UseableGun.onBulletHit += UseableGun_onBulletHit;
@@ -58,7 +59,11 @@ namespace PowerShenanigans
                 shouldAllow = false;
                 if (!_SelectedNode.ContainsValue(UnturnedPlayer.FromPlayer(gun.player).CSteamID))
                 {
+                    BarricadeDrop drop = Raycast.GetBarricade(gun.player, out string collider);
+                    if (drop != null)
+                    {
 
+                    }
                 }
                 return;
             }
@@ -206,6 +211,23 @@ namespace PowerShenanigans
                 sendEffectCool(player, pos, patheffect);
             }
         }
+        [HarmonyPatch(typeof(UseableMelee), "ReceivePlaySwing")]
+        private static class Patch_UseableMelee_ReceivePlaySwing
+        {
+            private static bool Prefix(UseableMelee __instance, ESwingMode mode)
+            {
+                if (mode == ESwingMode.WEAK)
+                {
+                    Console.WriteLine($"[PowerShenanigans] Weak swing detected from {UnturnedPlayer.FromPlayer(__instance.player).CharacterName}");
+                }
+                if (mode == ESwingMode.STRONG)
+                {
+                    Console.WriteLine($"[PowerShenanigans] Strong swing detected from {UnturnedPlayer.FromPlayer(__instance.player).CharacterName}");
+                }
+                return true;
+            }
+        }
+
         [HarmonyPatch(typeof(InteractableSpot), "ReceiveToggleRequest")]
         private static class Patch_InteractableSpot_ReceiveToggleRequest
         {
