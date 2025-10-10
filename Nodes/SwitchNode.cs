@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace PowerShenanigans.Nodes
 {
-    public class SwitchNode : IElectricNode
+    public class SwitchNode : MonoBehaviour, IElectricNode
     {
         private readonly IElectricNode _decoratee;
         private bool _isToggled;

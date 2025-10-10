@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace PowerShenanigans.Nodes
 {
-    public class GroupNode : IElectricNode
+    public class GroupNode : MonoBehaviour, IElectricNode
     {
         private readonly IReadOnlyCollection<IElectricNode> _children;
         public uint CurrentVoltage { get; private set; }

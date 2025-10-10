@@ -31,7 +31,7 @@ namespace PowerShenanigans.Nodes
             this.consumption = consumption;
         }
     }
-    public class ConsumerNode : IElectricNode
+    public class ConsumerNode : MonoBehaviour, IElectricNode
     {
         private readonly Consumer _consumer;
         public uint CurrentVoltage { get; private set; }

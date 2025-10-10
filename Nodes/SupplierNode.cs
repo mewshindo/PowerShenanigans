@@ -20,7 +20,7 @@ namespace PowerShenanigans.Nodes
             _generator = generator.GetComponent<InteractableGenerator>();
         }
     }
-    public class SupplierNode : IElectricNode
+    public class SupplierNode : MonoBehaviour, IElectricNode
     {
         private readonly IReadOnlyCollection<IElectricNode> _children;
         public uint CurrentVoltage { get; private set; }
