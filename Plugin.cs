@@ -1,4 +1,5 @@
 ﻿using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -199,7 +200,6 @@ namespace PowerShenanigans
             await Task.Delay(10000);
             EffectManager.ClearEffectByGuid(asset.GUID, Provider.findTransportConnection(player.CSteamID));
         }
-
         private void TracePath(UnturnedPlayer player, Vector3 point1, Vector3 point2, EffectAsset patheffect)
         {
             float distance = Vector3.Distance(point1, point2);
@@ -211,22 +211,32 @@ namespace PowerShenanigans
                 sendEffectCool(player, pos, patheffect);
             }
         }
-        [HarmonyPatch(typeof(UseableMelee), "ReceivePlaySwing")]
-        private static class Patch_UseableMelee_ReceivePlaySwing
-        {
-            private static bool Prefix(UseableMelee __instance, ESwingMode mode)
-            {
-                if (mode == ESwingMode.WEAK)
-                {
-                    Console.WriteLine($"[PowerShenanigans] Weak swing detected from {UnturnedPlayer.FromPlayer(__instance.player).CharacterName}");
-                }
-                if (mode == ESwingMode.STRONG)
-                {
-                    Console.WriteLine($"[PowerShenanigans] Strong swing detected from {UnturnedPlayer.FromPlayer(__instance.player).CharacterName}");
-                }
-                return true;
-            }
-        }
+        
+
+        //[HarmonyPatch(typeof(UseableMelee), "startPrimary")]
+        //private static class Patch_UseableMelee_startPrimary
+        //{
+        //    private static void Postfix(UseableMelee __instance)
+        //    {
+        //        if(!__instance.player.equipment.isBusy) 
+        //            return;
+
+        //        Console.WriteLine($"Lil swing from {__instance.player.name} ! isBusy: {__instance.player.equipment.isBusy}");
+        //        return;
+        //    }
+        //}
+        //[HarmonyPatch(typeof(UseableMelee), "startSecondary")]
+        //private static class Patch_UseableMelee_startSecondary
+        //{
+        //    private static void Postfix(UseableMelee __instance)
+        //    {
+        //        if (!__instance.player.equipment.isBusy)
+        //            return;
+
+        //        Console.WriteLine($"Big swing from {__instance.player.name} ! isBusy: {__instance.player.equipment.isBusy}");
+        //        return;
+        //    }
+        //}
 
         [HarmonyPatch(typeof(InteractableSpot), "ReceiveToggleRequest")]
         private static class Patch_InteractableSpot_ReceiveToggleRequest
