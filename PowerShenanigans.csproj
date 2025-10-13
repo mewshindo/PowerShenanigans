@@ -111,6 +111,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config.cs" />
+    <Compile Include="CoolEvents.cs" />
+    <Compile Include="Nodes\BaseNode.cs" />
     <Compile Include="Nodes\ConsumerNode.cs" />
     <Compile Include="Nodes\GroupNode.cs" />
     <Compile Include="Nodes\IElectricNode.cs" />

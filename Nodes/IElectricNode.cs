@@ -12,8 +12,11 @@ namespace PowerShenanigans.Nodes
     public interface IElectricNode
     {
         uint _voltage { get; }
-        ICollection<IElectricNode> Children { get; set; }
-        IElectricNode Parent { get; set; }
+        uint instanceID { get; }
+        ICollection<IElectricNode> Connections { get; set; }
+        void AddConnection(IElectricNode node);
+        void RemoveConnection(IElectricNode node);
+
         void IncreaseVoltage(uint amount);
         void DecreaseVoltage(uint amount);
     }

@@ -18,6 +18,7 @@ namespace PowerShenanigans
         public EffectAsset node_switch;
         public EffectAsset path_switch;
 
+        public List<Guid> nodeeffects = new List<Guid>();
         public Resources()
         {
             node_consumer = (EffectAsset)Assets.find(new Guid("ad1529d6692f473ead2ac79e70e273fb"));
@@ -26,6 +27,12 @@ namespace PowerShenanigans
             path_power = (EffectAsset)Assets.find(new Guid("aa4bf9e416b248f8b6ae4e48b30382a7"));
             node_switch = (EffectAsset)Assets.find(new Guid("8b7f38d937a0403eb99e97b535d9df83"));
             path_switch = (EffectAsset)Assets.find(new Guid("f8858fb1a24c4d70b1ca9a15e70606d5"));
+            nodeeffects.Add(node_consumer.GUID);
+            nodeeffects.Add(node_power.GUID);
+            nodeeffects.Add(node_switch.GUID);
+            nodeeffects.Add(path_consumer.GUID);
+            nodeeffects.Add(path_power.GUID);
+            nodeeffects.Add(path_switch.GUID);
         }
     }
 }

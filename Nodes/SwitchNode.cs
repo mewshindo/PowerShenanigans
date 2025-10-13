@@ -7,32 +7,35 @@ using UnityEngine;
 
 namespace PowerShenanigans.Nodes
 {
-    public class SwitchNode : MonoBehaviour, IElectricNode
+    public class SwitchNode : BaseNode
     {
-        public IElectricNode Parent { get; set; }
-        public ICollection<IElectricNode> Children { get; set; }
+        public bool IsOn { get; private set; } = true;
 
-        private bool _isToggled;
-        public uint _voltage { get; private set; }
-
-        public void Awake()
+        public void Toggle(bool state)
         {
-            Children = new List<IElectricNode>();
+            IsOn = state;
+            Plugin.Instance.UpdateAllNetworks();
         }
 
-        public void Toggle()
+        public override void IncreaseVoltage(uint amount)
         {
-            _isToggled = !_isToggled;
+            if (!IsOn) return;
+
+            _voltage = amount;
+            foreach (var conn in Connections)
+                conn.IncreaseVoltage(amount);
         }
 
-        public void IncreaseVoltage(uint amount)
+        public override void DecreaseVoltage(uint amount)
         {
+            if (!IsOn) return;
 
-        }
+            if (_voltage < amount) _voltage = 0;
+            else _voltage -= amount;
 
-        public void DecreaseVoltage(uint amount)
-        {
-
+            foreach (var conn in Connections)
+                conn.DecreaseVoltage(amount);
         }
     }
+
 }

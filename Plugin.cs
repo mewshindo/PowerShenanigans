@@ -1,6 +1,7 @@
 ﻿using System;
 using System.CodeDom;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -11,6 +12,7 @@ using PowerShenanigans;
 using PowerShenanigans.Nodes;
 using Rocket.Core.Assets;
 using Rocket.Core.Plugins;
+using Rocket.Unturned;
 using Rocket.Unturned.Player;
 using SDG.Unturned;
 using Steamworks;
@@ -23,19 +25,27 @@ namespace PowerShenanigans
         public static Plugin Instance;
         public Resources _resources;
 
-        private List<Guid> _ElectricalInspectors = new List<Guid>();
+        private HashSet<IElectricNode> nodes = new HashSet<IElectricNode>();
+
+        private List<Guid> _WiringTools = new List<Guid>();
         private Dictionary<CSteamID, Transform> _SelectedNode = new Dictionary<CSteamID, Transform>();
         protected override void Unload()
         {
             Level.onLevelLoaded -= onLevelLoaded;
             BarricadeManager.onBarricadeSpawned -= onBarricadeSpawned;
             UseableGun.onBulletHit -= UseableGun_onBulletHit;
-            PlayerEquipment.OnUseableChanged_Global -= PlayerEquipment_OnUseableChanged_Global;
+            U.Events.OnPlayerConnected -= (player) =>
+            {
+                player.Player.gameObject.AddComponent<CoolEvents>();
+            };
+            CoolEvents.OnDequipRequested -= onDequipRequested;
+            CoolEvents.OnEquipRequested -= onEquipRequested;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.UnpatchAll("com.mew.powerShenanigans");
             Instance = null;
         }
+
         protected override void Load()
         {
             Instance = this;
@@ -43,7 +53,12 @@ namespace PowerShenanigans
             Level.onLevelLoaded += onLevelLoaded;
             BarricadeManager.onBarricadeSpawned += onBarricadeSpawned;
             UseableGun.onBulletHit += UseableGun_onBulletHit;
-            PlayerEquipment.OnUseableChanged_Global += PlayerEquipment_OnUseableChanged_Global;
+            U.Events.OnPlayerConnected += (player) =>
+            {
+                player.Player.gameObject.AddComponent<CoolEvents>();
+            };
+            CoolEvents.OnDequipRequested += onDequipRequested;
+            CoolEvents.OnEquipRequested += onEquipRequested;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -51,18 +66,69 @@ namespace PowerShenanigans
             {
                 Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
             }
-        }
-        private void PlayerEquipment_OnUseableChanged_Global(PlayerEquipment equipment)
-        {
-            throw new NotImplementedException();
+
+            
         }
 
+        private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
+        {
+            if(asset.id == 1165)
+            {
+                DisplayNodes(equipment.player.channel.owner.playerID.steamID);
+            }
+        }
+
+        private void onDequipRequested(Player player, PlayerEquipment equipment, ref bool shouldAllow)
+        {
+            if(equipment.itemID == 1165 || _WiringTools.Contains(equipment.asset.GUID))
+            {
+                foreach (Guid guid in _resources.nodeeffects)
+                    EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
+            }
+        }
+        private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
+        {
+            if (isElectricalComponent(drop.model))
+            {
+                if (drop.model.GetComponent<InteractableGenerator>() != null)
+                {
+                    if (drop.model.GetComponent<SupplierNode>() == null)
+                        drop.model.gameObject.AddComponent<SupplierNode>();
+                    var node = drop.model.GetComponent<SupplierNode>();
+                    nodes.Add(node);
+                    if (drop.asset.id == 458) // Portable generator
+                        node.MaxSupply = 500;
+                    if(drop.asset.id == 1230) // Industrial generator
+                        node.MaxSupply = 2500;
+                }
+                else if (isSwitch(drop))
+                {
+                    if (drop.model.GetComponent<SwitchNode>() == null)
+                        drop.model.gameObject.AddComponent<SwitchNode>();
+                    var node = drop.model.GetComponent<SwitchNode>();
+                    nodes.Add(node);
+                }
+                else if (isConsumer(drop.model))
+                {
+                    if (drop.model.GetComponent<ConsumerNode>() == null)
+                        drop.model.gameObject.AddComponent<ConsumerNode>();
+                    var node = drop.model.GetComponent<ConsumerNode>();
+                    nodes.Add(node);
+                    node.SetPowered(false);
+                    if (drop.asset.id == 459) // Spotlight
+                        node.consumption = 250;
+                    if (drop.asset.id == 1222) // Cagelight
+                        node.consumption = 25;
+
+                }
+            }
+        }
         private void UseableGun_onBulletHit(UseableGun gun, BulletInfo bullet, InputInfo hit, ref bool shouldAllow)
         {
             var asset = gun.equippedGunAsset;
 
             // Only handle Electrical Inspectors or special gun id
-            if (!_ElectricalInspectors.Contains(asset.GUID) && asset.id != 1165)
+            if (!_WiringTools.Contains(asset.GUID) && asset.id != 1165)
                 return;
 
             shouldAllow = false;
@@ -81,19 +147,21 @@ namespace PowerShenanigans
             if (!isElectricalComponent(model))
                 return;
 
-            // Case 1: Selecting first node
+            // 🟢 Case 1: Selecting the first node
             if (!_SelectedNode.ContainsKey(steamid))
             {
                 _SelectedNode[steamid] = model;
-                player.Player.ServerShowHint($"Selected {drop.asset.name} ({drop.instanceID})\nShoot another component to link.\nShoot ground to clear selection.", 10f);
+                player.Player.ServerShowHint(
+                    $"Selected {drop.asset.name} ({drop.instanceID})\nShoot another component to link.\nShoot ground to clear selection.",
+                    10f);
                 return;
             }
 
-            // Case 2: Linking with a second node
+            // 🟠 Case 2: Attempting to link with a second node
             var node1 = _SelectedNode[steamid];
             var node2 = model;
 
-            // Deselect if same node
+            // Same node clicked again → deselect
             if (node1 == node2)
             {
                 _SelectedNode.Remove(steamid);
@@ -101,7 +169,7 @@ namespace PowerShenanigans
                 return;
             }
 
-            // Ensure both are valid components
+            // Validate components
             if (!isElectricalComponent(node1) || !isElectricalComponent(node2))
             {
                 ClearSelection(player);
@@ -118,51 +186,59 @@ namespace PowerShenanigans
             var electricNode1 = node1.GetComponent<IElectricNode>();
             var electricNode2 = node2.GetComponent<IElectricNode>();
 
-            if (electricNode1?.Children == null || electricNode2?.Children == null)
+            if (electricNode1 == null || electricNode2 == null)
             {
                 player.Player.ServerShowHint("Invalid node structure.", 3f);
                 return;
             }
 
-            if (electricNode1.Children.Contains(electricNode2) || electricNode2.Children.Contains(electricNode1))
+            // 🧩 Unlink if already connected
+            if (electricNode1.Connections.Contains(electricNode2) || electricNode2.Connections.Contains(electricNode1))
             {
                 player.Player.ServerShowHint("Unlinked nodes!", 3f);
 
-                if (electricNode1.Children.Remove(electricNode2))
-                    electricNode2.Parent = null;
-                else if (electricNode2.Children.Remove(electricNode1))
-                    electricNode1.Parent = null;
+                electricNode1.Connections.Remove(electricNode2);
+                electricNode2.Connections.Remove(electricNode1);
 
+                updateNodes(steamid);
+
+                // If a node loses all connections, reset its voltage
+                if (electricNode1.Connections.Count == 0)
+                    electricNode1.DecreaseVoltage(electricNode1._voltage);
+                if (electricNode2.Connections.Count == 0)
+                    electricNode2.DecreaseVoltage(electricNode2._voltage);
+
+                UpdateAllNetworks();
                 ClearSelection(player);
-                DisplayNodes(steamid);
                 return;
             }
 
-
-            if (!TryLinkNodes(electricNode1, electricNode2))
+            if (!Link(electricNode1, electricNode2))
             {
                 player.Player.ServerShowHint("Invalid node combination!", 3f);
                 ClearSelection(player);
                 return;
             }
 
-            player.Player.ServerShowHint($"Linked {node1.name} → {node2.name}", 5f);
+            player.Player.ServerShowHint($"Linked {node1.name} ↔ {node2.name}", 5f);
+
+            UpdateAllNetworks();
+            updateNodes(steamid);
             _SelectedNode.Remove(steamid);
-
-            DisplayNodes(steamid);
-
-            //// Handle flag adding
-            //if (HasFlag(asset, "ElectricalInspector"))
-            //{
-            //    _ElectricalInspectors.Add(asset.GUID);
-            //}
         }
+
 
         private void ClearSelection(UnturnedPlayer player)
         {
             var steamid = player.CSteamID;
             _SelectedNode.Remove(steamid);
             player.Player.ServerShowHint("Cleared selection.", 3f);
+        }
+        private void updateNodes(CSteamID steamid)
+        {
+            foreach (Guid guid in _resources.nodeeffects)
+                EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(steamid));
+            DisplayNodes(steamid);
         }
 
         private bool TryEnsureNodeScripts(Transform node1, Transform node2)
@@ -207,39 +283,53 @@ namespace PowerShenanigans
             return Link(a, b);
         }
 
-        private bool Link(IElectricNode parent, IElectricNode child)
+        private bool Link(IElectricNode a, IElectricNode b)
         {
-            if(!parent.Children.Contains(child))
-                parent.Children.Add(child);
-            child.Parent = parent;
+            if (a == null || b == null)
+                return false;
+
+            if (!a.Connections.Contains(b))
+                a.Connections.Add(b);
+            if (!b.Connections.Contains(a))
+                b.Connections.Add(a);
+
+            UpdateAllNetworks();
             return true;
         }
+
 
         private void onLevelLoaded(int level)
         {
             Level.info.configData.Has_Global_Electricity = true;
             _resources = new Resources();
-        }
-        private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
-        {
-            if (isElectricalComponent(drop.model))
+
+            foreach (BarricadeRegion reg in BarricadeManager.regions)
             {
-                if (drop.model.GetComponent<InteractableGenerator>() != null)
+                foreach (BarricadeDrop drop in reg.drops)
                 {
-                    if (drop.model.GetComponent<SupplierNode>() == null)
-                        drop.model.gameObject.AddComponent<SupplierNode>();
-                }
-                else if (isSwitch(drop))
-                {
-                    if (drop.model.GetComponent<SwitchNode>() == null)
-                        drop.model.gameObject.AddComponent<SwitchNode>();
-                }
-                else if (isConsumer(drop.model))
-                {
-                    if (drop.model.GetComponent<ConsumerNode>() == null)
-                        drop.model.gameObject.AddComponent<ConsumerNode>();
+                    onBarricadeSpawned(reg, drop);
                 }
             }
+            long time1 = Stopwatch.GetTimestamp();
+
+            List<ItemGunAsset> wiringtools = new List<ItemGunAsset>();
+            Assets.find(wiringtools);
+
+            foreach (ItemGunAsset asset in wiringtools)
+            {
+                if(HasFlag(asset, "WiringTool"))
+                {
+                    _WiringTools.Add(asset.GUID);
+                }
+                else if(asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5"))
+                {
+                    _WiringTools.Add(asset.GUID);
+                }
+            }
+            long time2 = Stopwatch.GetTimestamp();
+
+            float milliseconds = (time2 - time1) * 1000f / Stopwatch.Frequency;
+            Console.WriteLine($"[Wired] Found {_WiringTools.Count} wiring tools, parsed {wiringtools.Count} item asset files, took {milliseconds} ms.");
         }
         private static List<Transform> getBarricadesInRadius(Vector3 center, float radius)
         {
@@ -309,7 +399,7 @@ namespace PowerShenanigans
                 position = dropPosition,
                 relevantDistance = 64f,
                 shouldReplicate = true,
-                reliable = true
+                reliable = true,
             };
             effect.SetDirection(Vector3.down);
             effect.SetRelevantPlayer(player.SteamPlayer());
@@ -319,72 +409,142 @@ namespace PowerShenanigans
         {
             float distance = Vector3.Distance(point1, point2);
 
-            float spacing = Mathf.Clamp(distance / 20f, 0.5f, 2.0f);
-            int count = Mathf.FloorToInt(distance / spacing);
-
             Vector3 direction = (point2 - point1).normalized;
 
-            for (int i = 0; i <= count; i++)
+            TriggerEffectParameters effect = new TriggerEffectParameters
             {
-                Vector3 pos = point1 + direction * (i * spacing);
-                sendEffectCool(player, pos, pathEffect);
+                asset = pathEffect,
+                position = point1,
+                relevantDistance = 64f,
+                shouldReplicate = true,
+                reliable = true,
+                scale = new Vector3(1f, 1f, distance)
+            };
+            effect.SetDirection(direction);
+            effect.SetRelevantPlayer(player.SteamPlayer());
+            EffectManager.triggerEffect(effect);
+        }
+
+        private void DisplayNodes(CSteamID steamid)
+        {
+            UnturnedPlayer player = UnturnedPlayer.FromCSteamID(steamid);
+            if (player == null) return;
+
+            Console.WriteLine($"Displayed nodes to {player.DisplayName}");
+
+            // Keep track of which connections we’ve already drawn
+            HashSet<(IElectricNode, IElectricNode)> drawnConnections = new HashSet<(IElectricNode, IElectricNode)>();
+
+            foreach (Transform t in getBarricadesInRadius(player.Position, 100f))
+            {
+                if (!t.TryGetComponent<IElectricNode>(out IElectricNode node))
+                    continue;
+
+                // Choose node type effect
+                if (node is ConsumerNode)
+                    sendEffectCool(player, t.position, _resources.node_consumer);
+                else if (node is SupplierNode)
+                    sendEffectCool(player, t.position, _resources.node_power);
+                else if (node is SwitchNode)
+                    sendEffectCool(player, t.position, _resources.node_switch);
+                else
+                    continue;
+
+                // Draw connections (paths)
+                foreach (IElectricNode connected in node.Connections)
+                {
+                    if (connected == null)
+                        continue;
+
+                    // Skip reversed duplicates (A↔B drawn only once)
+                    var pair = (node, connected);
+                    var reversed = (connected, node);
+                    if (drawnConnections.Contains(pair) || drawnConnections.Contains(reversed))
+                        continue;
+
+                    drawnConnections.Add(pair);
+
+                    Vector3 start = ((MonoBehaviour)node).transform.position;
+                    Vector3 end = ((MonoBehaviour)connected).transform.position;
+
+                    EffectAsset pathEffect = _resources.path_power;
+
+                    if (node is SupplierNode || connected is SupplierNode)
+                        pathEffect = _resources.path_power;
+                    else if (node is SwitchNode || connected is SwitchNode)
+                        pathEffect = _resources.path_switch;
+                    else
+                        pathEffect = _resources.path_consumer;
+
+                    TracePath(player, start, end, pathEffect);
+                }
             }
         }
 
-        private async void DisplayNodes(CSteamID steamid)
+        public void UpdateAllNetworks()
         {
-            UnturnedPlayer player = UnturnedPlayer.FromCSteamID(steamid);
-            if (player != null)
+            var visited = new HashSet<IElectricNode>();
+
+            foreach (var node in nodes)
             {
-                Console.WriteLine("Displayed nodes to " + player.DisplayName);
+                if (visited.Contains(node))
+                    continue;
+
+                var connected = GetConnectedNetwork(node, visited);
+
+                // Gather suppliers and consumers
+                var suppliers = connected.OfType<SupplierNode>().ToList();
+                var consumers = connected.OfType<ConsumerNode>().ToList();
+
+                uint totalSupply = (uint)suppliers.Sum(s => s.MaxSupply);
+                uint totalConsumption = (uint)consumers.Sum(c => c.consumption);
+
+                // If any switch in the path is off, that branch won’t appear in connected list
+                if (totalConsumption > totalSupply)
+                {
+                    // Too much load — no one gets power
+                    foreach (var c in consumers)
+                        c.DecreaseVoltage(c._voltage);
+                    continue;
+                }
+
+                // Distribute total supply evenly or proportionally
+                uint perConsumer = consumers.Count > 0 ? totalSupply / (uint)consumers.Count : 0;
+
+                foreach (var c in consumers)
+                    c.IncreaseVoltage(perConsumer);
             }
-            List<Guid> usedEffects = new List<Guid>();
-            foreach (Transform t in getBarricadesInRadius(player.Position, 100f))
-            {
-                if (isConsumer(t))
-                {
-                    sendEffectCool(player, t.position, _resources.node_consumer);
-                    usedEffects.Add(_resources.node_consumer.GUID);
-                    if (t.TryGetComponent<IElectricNode>(out IElectricNode node))
-                    {
-                        if (node.Parent != null)
-                        {
-                            TracePath(player, t.position, ((MonoBehaviour)node.Parent).transform.position, _resources.path_consumer);
-                            usedEffects.Add(_resources.path_consumer.GUID);
-                        }
-                    }
-                }
-                else if (t.GetComponent<InteractableFire>() != null)
-                {
-                    sendEffectCool(player, t.position, _resources.node_switch);
-                    usedEffects.Add(_resources.node_switch.GUID);
-                    if (t.TryGetComponent<IElectricNode>(out IElectricNode node2))
-                    {
-                        if (node2.Parent != null)
-                        {
-                            TracePath(player, t.position, ((MonoBehaviour)node2.Parent).transform.position, _resources.path_switch);
-                            usedEffects.Add(_resources.path_switch.GUID);
-                        }
-                    }
-                }
-                else if (t.GetComponent<InteractableGenerator>() != null)
-                {
-                    sendEffectCool(player, t.position, _resources.node_power);
-                    usedEffects.Add(_resources.node_power.GUID);
-                    if (t.TryGetComponent<IElectricNode>(out IElectricNode node3))
-                    {
-                        if (node3.Parent != null)
-                        {
-                            TracePath(player, t.position, ((MonoBehaviour)node3.Parent).transform.position, _resources.path_power);
-                            usedEffects.Add(_resources.path_power.GUID);
-                        }
-                    }
-                }
-            }
-            await Task.Delay(5000);
-            foreach (Guid guid in usedEffects)
-                EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(player.CSteamID));
         }
+
+        private List<IElectricNode> GetConnectedNetwork(IElectricNode root, HashSet<IElectricNode> visited)
+        {
+            List<IElectricNode> connected = new List<IElectricNode>();
+            Queue<IElectricNode> queue = new Queue<IElectricNode>();
+
+            queue.Enqueue(root);
+            visited.Add(root);
+
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+                connected.Add(node);
+
+                foreach (var neighbor in node.Connections)
+                {
+                    if (neighbor is SwitchNode sw && !sw.IsOn)
+                        continue; // block current flow
+
+                    if (!visited.Contains(neighbor))
+                    {
+                        visited.Add(neighbor);
+                        queue.Enqueue(neighbor);
+                    }
+                }
+            }
+
+            return connected;
+        }
+
 
         //[HarmonyPatch(typeof(UseableMelee), "startPrimary")]
         //private static class Patch_UseableMelee_startPrimary
@@ -432,19 +592,9 @@ namespace PowerShenanigans
             private static bool Prefix(InteractableFire __instance, ServerInvocationContext context, bool desiredLit)
             {
                 Console.WriteLine(string.Format("[PowerShenanigans] ReceiveToggleRequest from player {0} desiredLit={1}, __instance.name: {2}", context.GetPlayer()?.ToString() ?? "null", desiredLit, __instance.name));
-                if (__instance.name == "360")
+                if (__instance.name == "1272")
                 {
-                    List<Transform> barricadesinradius = getBarricadesInRadius(__instance.transform.position, 100f);
-                    Console.WriteLine($"Found {barricadesinradius.Count} barricades in radius");
-                    foreach (Transform t in barricadesinradius)
-                    {
-                        if (t.GetComponent<InteractableSpot>() != null)
-                        {
-                            Console.WriteLine($"[PowerShenanigans] Setting spot {t.name} to {desiredLit}");
-                            t.GetComponent<InteractableSpot>().updateWired(desiredLit);
-                            BarricadeManager.ServerSetSpotPowered(t.GetComponent<InteractableSpot>(), desiredLit);
-                        }
-                    }
+                    __instance.gameObject.GetComponent<SwitchNode>()?.Toggle(desiredLit);
                 }
                 return true;
             }
@@ -480,21 +630,31 @@ namespace PowerShenanigans
         private bool isSwitch(BarricadeDrop drop)
         {
             if (drop == null) return false;
+            if (drop.asset.id == 1272) return true;
             if (HasFlag(drop.asset, "Switch"))
                 return true;
             return false;
         }
         private bool HasFlag(Asset asset, string flag)
         {
-            StreamReader reader = File.OpenText(asset.getFilePath());
-            string line;
-            while ((line = reader.ReadLine()) != null)
+            string path = asset.getFilePath();
+            if (!File.Exists(path))
+                return false;
+
+            using (var reader = File.OpenText(path))
             {
-                if (line.StartsWith(flag))
-                    return true;
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    line = line.Trim();
+                    if (line.StartsWith(flag, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
             }
+
             return false;
         }
+
     }
     public enum EElectricalComponentType
     {
