@@ -22,34 +22,21 @@ namespace PowerShenanigans.Nodes
     }
     public class SupplierNode : MonoBehaviour, IElectricNode
     {
-        private readonly IReadOnlyCollection<IElectricNode> _children;
-        public uint CurrentVoltage { get; private set; }
+        public ICollection<IElectricNode> Children { get; set; }
+        public IElectricNode Parent { get; set; }
+        public uint _voltage { get; private set; }
         public uint MaxSupply { get; }
-        public SupplierNode(uint maxSupply, IReadOnlyCollection<IElectricNode> children)
+        public void Awake()
         {
-            MaxSupply = maxSupply;
-            _children = children;
+            Children = new List<IElectricNode>();
         }
         public void IncreaseVoltage(uint amount)
         {
-            CurrentVoltage = Math.Min(CurrentVoltage + amount, MaxSupply);
 
-            foreach (var child in _children)
-            {
-                child.IncreaseVoltage(amount);
-            }
         }
         public void DecreaseVoltage(uint amount)
         {
-            if (CurrentVoltage < amount)
-                CurrentVoltage = 0;
-            else
-                CurrentVoltage -= amount;
 
-            foreach (var child in _children)
-            {
-                child.DecreaseVoltage(amount);
-            }
         }
     }
 }

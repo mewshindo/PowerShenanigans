@@ -30,36 +30,50 @@ namespace PowerShenanigans.Nodes
             _safezone = barricade.GetComponent<InteractableSafezone>();
             this.consumption = consumption;
         }
+        public void SetPowered(bool isPowered)
+        {
+            if (_spot != null)
+                BarricadeManager.ServerSetSpotPowered(_spot, isPowered);
+            else if (_oven != null)
+                BarricadeManager.ServerSetOvenLit(_oven, isPowered);
+            else if (_oxygenator != null)
+                BarricadeManager.ServerSetOxygenatorPowered(_oxygenator, isPowered);
+            else if (_safezone != null)
+                BarricadeManager.ServerSetSafezonePowered(_safezone, isPowered);
+        }
     }
     public class ConsumerNode : MonoBehaviour, IElectricNode
     {
-        private readonly Consumer _consumer;
-        public uint CurrentVoltage { get; private set; }
+        public IElectricNode Parent { get; set; }
+        public ICollection<IElectricNode> Children { get; set; }
 
-        public ConsumerNode(Consumer consumer)
+        public Consumer _consumer;
+        public uint _voltage { get; private set; }
+
+        public void Awake()
         {
-            _consumer = consumer;
+            Children = new List<IElectricNode>();
         }
-
         public void IncreaseVoltage(uint amount)
         {
-            CurrentVoltage += amount;
+            _voltage += amount;
             CheckPowerStatus();
         }
 
         public void DecreaseVoltage(uint amount)
         {
-            if (CurrentVoltage < amount)
-                CurrentVoltage = 0;
+            if (_voltage < amount)
+                _voltage = 0;
             else
-                CurrentVoltage -= amount;
+                _voltage -= amount;
 
             CheckPowerStatus();
         }
 
         private void CheckPowerStatus()
         {
-            bool isPowered = CurrentVoltage >= _consumer.consumption;
+            bool isPowered = _voltage >= _consumer.consumption;
+            _consumer.SetPowered(isPowered);
 
         }
     }

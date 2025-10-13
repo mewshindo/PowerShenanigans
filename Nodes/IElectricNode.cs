@@ -11,7 +11,9 @@ namespace PowerShenanigans.Nodes
 
     public interface IElectricNode
     {
-        uint CurrentVoltage { get; }
+        uint _voltage { get; }
+        ICollection<IElectricNode> Children { get; set; }
+        IElectricNode Parent { get; set; }
         void IncreaseVoltage(uint amount);
         void DecreaseVoltage(uint amount);
     }

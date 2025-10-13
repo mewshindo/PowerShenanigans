@@ -9,14 +9,15 @@ namespace PowerShenanigans.Nodes
 {
     public class SwitchNode : MonoBehaviour, IElectricNode
     {
-        private readonly IElectricNode _decoratee;
+        public IElectricNode Parent { get; set; }
+        public ICollection<IElectricNode> Children { get; set; }
+
         private bool _isToggled;
+        public uint _voltage { get; private set; }
 
-        public uint CurrentVoltage => _isToggled ? _decoratee.CurrentVoltage : 0;
-
-        public SwitchNode(IElectricNode decoratee)
+        public void Awake()
         {
-            _decoratee = decoratee;
+            Children = new List<IElectricNode>();
         }
 
         public void Toggle()
@@ -26,14 +27,12 @@ namespace PowerShenanigans.Nodes
 
         public void IncreaseVoltage(uint amount)
         {
-            if (_isToggled)
-                _decoratee.IncreaseVoltage(amount);
+
         }
 
         public void DecreaseVoltage(uint amount)
         {
-            if (_isToggled)
-                _decoratee.DecreaseVoltage(amount);
+
         }
     }
 }
