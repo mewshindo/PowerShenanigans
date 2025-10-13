@@ -310,7 +310,7 @@ namespace PowerShenanigans
                     onBarricadeSpawned(reg, drop);
                 }
             }
-            long time1 = Stopwatch.GetTimestamp();
+            var stopwatch = Stopwatch.StartNew();
 
             List<ItemGunAsset> wiringtools = new List<ItemGunAsset>();
             Assets.find(wiringtools);
@@ -321,14 +321,14 @@ namespace PowerShenanigans
                 {
                     _WiringTools.Add(asset.GUID);
                 }
-                else if(asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5"))
+                else if(asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5") || asset.id == 1165)
                 {
                     _WiringTools.Add(asset.GUID);
                 }
             }
-            long time2 = Stopwatch.GetTimestamp();
+            
 
-            float milliseconds = (time2 - time1) * 1000f / Stopwatch.Frequency;
+            float milliseconds = stopwatch.ElapsedMilliseconds;
             Console.WriteLine($"[Wired] Found {_WiringTools.Count} wiring tools, parsed {wiringtools.Count} item asset files, took {milliseconds} ms.");
         }
         private static List<Transform> getBarricadesInRadius(Vector3 center, float radius)
@@ -483,6 +483,7 @@ namespace PowerShenanigans
 
         public void UpdateAllNetworks()
         {
+            var stopwatch = Stopwatch.StartNew();
             var visited = new HashSet<IElectricNode>();
 
             foreach (var node in nodes)
@@ -514,6 +515,8 @@ namespace PowerShenanigans
                 foreach (var c in consumers)
                     c.IncreaseVoltage(perConsumer);
             }
+            stopwatch.Stop();
+            Console.WriteLine($"[PowerShenanigans] Updated networks in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         private List<IElectricNode> GetConnectedNetwork(IElectricNode root, HashSet<IElectricNode> visited)
