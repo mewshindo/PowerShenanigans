@@ -34,6 +34,7 @@ namespace PowerShenanigans
             Level.onLevelLoaded -= onLevelLoaded;
             BarricadeManager.onBarricadeSpawned -= onBarricadeSpawned;
             UseableGun.onBulletHit -= UseableGun_onBulletHit;
+            UseableGun.onBulletSpawned -= onBulletSpawned;
             U.Events.OnPlayerConnected -= (player) =>
             {
                 player.Player.gameObject.AddComponent<CoolEvents>();
@@ -54,6 +55,7 @@ namespace PowerShenanigans
             Level.onLevelLoaded += onLevelLoaded;
             BarricadeManager.onBarricadeSpawned += onBarricadeSpawned;
             UseableGun.onBulletHit += UseableGun_onBulletHit;
+            UseableGun.onBulletSpawned += onBulletSpawned;
             U.Events.OnPlayerConnected += (player) =>
             {
                 player.Player.gameObject.AddComponent<CoolEvents>();
@@ -69,94 +71,32 @@ namespace PowerShenanigans
                 Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
             }
 
-            
         }
 
-        private void onSalvageRequested_Global(BarricadeDrop drop, SteamPlayer instigatorClient, ref bool shouldAllow)
-        {
-            if (drop == null)
-                return;
-
-            uint id = drop.instanceID;
-            if (!nodes.TryGetValue(id, out var node))
-                return;
-
-            // Unlink from all connected nodes
-            foreach (var connected in node.Connections.ToList())
-            {
-                connected.Connections.Remove(node);
-            }
-
-            node.Connections.Clear();
-            nodes.Remove(id);
-
-            UpdateAllNetworks(); // Recalculate power
-
-            Console.WriteLine($"Removed node {id} and unlinked from network.");
-        }
-
-        private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
-        {
-            if(asset.id == 1165)
-            {
-                DisplayNodes(equipment.player.channel.owner.playerID.steamID);
-            }
-        }
-
-        private void onDequipRequested(Player player, PlayerEquipment equipment, ref bool shouldAllow)
-        {
-            if(equipment.itemID == 1165 || _WiringTools.Contains(equipment.asset.GUID))
-            {
-                foreach (Guid guid in _resources.nodeeffects)
-                    EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
-            }
-        }
-        private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
-        {
-            if (isElectricalComponent(drop.model))
-            {
-                if (drop.model.GetComponent<InteractableGenerator>() != null)
-                {
-                    if (drop.model.GetComponent<SupplierNode>() == null)
-                        drop.model.gameObject.AddComponent<SupplierNode>();
-                    var node = drop.model.GetComponent<SupplierNode>();
-                    nodes[node.instanceID] = node;
-                    if (drop.asset.id == 458) // Portable generator
-                        node.MaxSupply = 500;
-                    if(drop.asset.id == 1230) // Industrial generator
-                        node.MaxSupply = 2500;
-                }
-                else if (isSwitch(drop))
-                {
-                    if (drop.model.GetComponent<SwitchNode>() == null)
-                        drop.model.gameObject.AddComponent<SwitchNode>();
-                    var node = drop.model.GetComponent<SwitchNode>();
-                    nodes[node.instanceID] = node;
-                }
-                else if (isConsumer(drop.model))
-                {
-                    if (drop.model.GetComponent<ConsumerNode>() == null)
-                        drop.model.gameObject.AddComponent<ConsumerNode>();
-                    var node = drop.model.GetComponent<ConsumerNode>();
-                    nodes[node.instanceID] = node;
-                    node.SetPowered(false);
-                    if (drop.asset.id == 459) // Spotlight
-                        node.consumption = 250;
-                    if (drop.asset.id == 1222) // Cagelight
-                        node.consumption = 25;
-
-                }
-            }
-        }
         private void UseableGun_onBulletHit(UseableGun gun, BulletInfo bullet, InputInfo hit, ref bool shouldAllow)
+        {
+            if (_WiringTools.Contains(gun.equippedGunAsset.GUID))
+                shouldAllow = false;
+        }
+        private bool doesOwnDrop(BarricadeDrop drop, CSteamID steamid)
+        {
+            var dropdata = drop.GetServersideData();
+            if(dropdata.owner != 0 && dropdata.owner == (ulong)steamid)
+                return true;
+            if(dropdata.group != 0 && dropdata.group == (ulong)UnturnedPlayer.FromCSteamID(steamid).SteamGroupID)
+                return true;
+            if (dropdata.group != 0 && dropdata.group == (ulong)UnturnedPlayer.FromCSteamID(steamid).Player.quests.groupID)
+                return true;
+            return false;
+        }
+
+        private void onBulletSpawned(UseableGun gun, BulletInfo bullet)
         {
             var asset = gun.equippedGunAsset;
 
             // Only handle Electrical Inspectors or special gun id
-            if (!_WiringTools.Contains(asset.GUID) && asset.id != 1165)
+            if (!_WiringTools.Contains(asset.GUID))
                 return;
-
-            shouldAllow = false;
 
             var steamid = gun.player.channel.owner.playerID.steamID;
             var player = UnturnedPlayer.FromCSteamID(steamid);
@@ -165,6 +105,13 @@ namespace PowerShenanigans
             if (drop == null)
             {
                 ClearSelection(player);
+                return;
+            }
+
+            if(!doesOwnDrop(drop, steamid))
+            {
+                ClearSelection(player);
+                player.Player.ServerShowHint("You do not own this barricade!", 3f);
                 return;
             }
 
@@ -225,7 +172,7 @@ namespace PowerShenanigans
                 electricNode1.Connections.Remove(electricNode2);
                 electricNode2.Connections.Remove(electricNode1);
 
-                updateNodes(steamid);
+                updateNodesDisplay(steamid);
 
                 // If a node loses all connections, reset its voltage
                 if (electricNode1.Connections.Count == 0)
@@ -248,18 +195,141 @@ namespace PowerShenanigans
             player.Player.ServerShowHint($"Linked {node1.name} ↔ {node2.name}", 5f);
 
             UpdateAllNetworks();
-            updateNodes(steamid);
+            updateNodesDisplay(steamid);
             _SelectedNode.Remove(steamid);
         }
 
+        private void onSalvageRequested_Global(BarricadeDrop drop, SteamPlayer instigatorClient, ref bool shouldAllow)
+        {
+            if (drop == null)
+            {
+                Console.WriteLine("Drop null");
+                return;
+            }
 
+            drop.model.TryGetComponent<IElectricNode>(out var nodeComp);
+            if (nodeComp != null)
+            {
+                nodeComp.unInit();
+                Console.WriteLine($"Removed node component from salvaged drop {drop.instanceID}");
+            }
+
+            uint id = drop.instanceID;
+            if (!nodes.TryGetValue(id, out var node))
+            {
+                Console.WriteLine($"No id in _nodes: {drop.instanceID}");
+                return;
+            }
+
+            // Unlink from all connected nodes
+            foreach (var connected in node.Connections.ToList())
+            {
+                connected.Connections.Remove(node);
+            }
+
+            node.Connections.Clear();
+            nodes.Remove(id);
+            updateNodesDisplay(instigatorClient.playerID.steamID);
+            UpdateAllNetworks(); // Recalculate power
+
+            Console.WriteLine($"Removed node {id} and unlinked from network.");
+        }
+        private void onLevelLoaded(int level)
+        {
+            Level.info.configData.Has_Global_Electricity = true;
+            _resources = new Resources();
+
+            foreach (BarricadeRegion reg in BarricadeManager.regions)
+            {
+                foreach (BarricadeDrop drop in reg.drops)
+                {
+                    onBarricadeSpawned(reg, drop);
+                }
+            }
+            var stopwatch = Stopwatch.StartNew();
+
+            List<ItemGunAsset> wiringtools = new List<ItemGunAsset>();
+            Assets.find(wiringtools);
+
+            foreach (ItemGunAsset asset in wiringtools)
+            {
+                if (HasFlag(asset, "WiringTool"))
+                {
+                    _WiringTools.Add(asset.GUID);
+                }
+                else if (asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5") || asset.id == 1165)
+                {
+                    _WiringTools.Add(asset.GUID);
+                }
+            }
+
+
+            float milliseconds = stopwatch.ElapsedMilliseconds;
+            Console.WriteLine($"[Wired] Found {_WiringTools.Count} wiring tools, parsed {wiringtools.Count} item asset files, took {milliseconds} ms.");
+        }
+        private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
+        {
+            if(_WiringTools.Contains(asset.GUID))
+            {
+                DisplayNodes(equipment.player.channel.owner.playerID.steamID);
+            }
+        }
+
+        private void onDequipRequested(Player player, PlayerEquipment equipment, ref bool shouldAllow)
+        {
+            if(_WiringTools.Contains(equipment.asset.GUID))
+            {
+                foreach (Guid guid in _resources.nodeeffects)
+                    EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
+            }
+        }
+        private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
+        {
+            if (isElectricalComponent(drop.model))
+            {
+                if (drop.model.GetComponent<InteractableGenerator>() != null)
+                {
+                    if (drop.model.GetComponent<SupplierNode>() == null)
+                        drop.model.gameObject.AddComponent<SupplierNode>();
+                    var node = drop.model.GetComponent<SupplierNode>();
+                    nodes[node.instanceID] = node;
+                    if (drop.asset.id == 458) // Portable generator
+                        node.MaxSupply = 500;
+                    if(drop.asset.id == 1230) // Industrial generator
+                        node.MaxSupply = 2500;
+                }
+                else if (isSwitch(drop))
+                {
+                    if (drop.model.GetComponent<SwitchNode>() == null)
+                        drop.model.gameObject.AddComponent<SwitchNode>();
+                    var node = drop.model.GetComponent<SwitchNode>();
+                    nodes[node.instanceID] = node;
+                }
+                else if (isConsumer(drop.model))
+                {
+                    if (drop.model.GetComponent<ConsumerNode>() == null)
+                        drop.model.gameObject.AddComponent<ConsumerNode>();
+                    var node = drop.model.GetComponent<ConsumerNode>();
+                    nodes[node.instanceID] = node;
+                    node.SetPowered(false);
+                    if (drop.asset.id == 459) // Spotlight
+                        node.consumption = 250;
+                    if (drop.asset.id == 1222) // Cagelight
+                        node.consumption = 25;
+
+                }
+            }
+        }
         private void ClearSelection(UnturnedPlayer player)
         {
             var steamid = player.CSteamID;
             _SelectedNode.Remove(steamid);
-            player.Player.ServerShowHint("Cleared selection.", 3f);
         }
-        private void updateNodes(CSteamID steamid)
+        /// <summary>
+        /// Resets and then displays nodes to the player
+        /// </summary>
+        /// <param name="steamid"></param>
+        private void updateNodesDisplay(CSteamID steamid)
         {
             foreach (Guid guid in _resources.nodeeffects)
                 EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(steamid));
@@ -321,44 +391,9 @@ namespace PowerShenanigans
             UpdateAllNetworks();
             return true;
         }
-
-
-        private void onLevelLoaded(int level)
+        private static List<BarricadeDrop> getBarricadesInRadius(Vector3 center, float radius)
         {
-            Level.info.configData.Has_Global_Electricity = true;
-            _resources = new Resources();
-
-            foreach (BarricadeRegion reg in BarricadeManager.regions)
-            {
-                foreach (BarricadeDrop drop in reg.drops)
-                {
-                    onBarricadeSpawned(reg, drop);
-                }
-            }
-            var stopwatch = Stopwatch.StartNew();
-
-            List<ItemGunAsset> wiringtools = new List<ItemGunAsset>();
-            Assets.find(wiringtools);
-
-            foreach (ItemGunAsset asset in wiringtools)
-            {
-                if(HasFlag(asset, "WiringTool"))
-                {
-                    _WiringTools.Add(asset.GUID);
-                }
-                else if(asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5") || asset.id == 1165)
-                {
-                    _WiringTools.Add(asset.GUID);
-                }
-            }
-            
-
-            float milliseconds = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine($"[Wired] Found {_WiringTools.Count} wiring tools, parsed {wiringtools.Count} item asset files, took {milliseconds} ms.");
-        }
-        private static List<Transform> getBarricadesInRadius(Vector3 center, float radius)
-        {
-            List<Transform> result = new List<Transform>();
+            List<BarricadeDrop> result = new List<BarricadeDrop>();
             BarricadeRegion[,] regions = BarricadeManager.regions;
             foreach (BarricadeRegion reg in regions)
             {
@@ -367,7 +402,7 @@ namespace PowerShenanigans
                     float dist = Vector3.Distance(center, drop.model.position);
                     if (dist < radius)
                     {
-                        result.Add(drop.model);
+                        result.Add(drop);
                     }
                 }
             }
@@ -460,9 +495,12 @@ namespace PowerShenanigans
             // Keep track of which connections we’ve already drawn
             HashSet<(IElectricNode, IElectricNode)> drawnConnections = new HashSet<(IElectricNode, IElectricNode)>();
 
-            foreach (Transform t in getBarricadesInRadius(player.Position, 100f))
+            foreach (BarricadeDrop drop in getBarricadesInRadius(player.Position, 100f))
             {
+                Transform t = drop.model;
                 if (!t.TryGetComponent<IElectricNode>(out IElectricNode node))
+                    continue;
+                if(!doesOwnDrop(drop, steamid))
                     continue;
 
                 // Choose node type effect

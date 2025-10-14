@@ -11,6 +11,10 @@ namespace PowerShenanigans.Nodes
     public abstract class BaseNode : MonoBehaviour, IElectricNode
     {
         public ICollection<IElectricNode> Connections { get; set; }
+        public void unInit()
+        {
+            Destroy(this);
+        }
         public uint _voltage { get; protected set; }
         public uint instanceID { get; set; } 
 
