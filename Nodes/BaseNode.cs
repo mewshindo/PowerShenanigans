@@ -12,11 +12,12 @@ namespace PowerShenanigans.Nodes
     {
         public ICollection<IElectricNode> Connections { get; set; }
         public uint _voltage { get; protected set; }
-        public uint instanceID => BarricadeManager.FindBarricadeByRootTransform(gameObject.transform).instanceID;
+        public uint instanceID { get; set; } 
 
         protected virtual void Awake()
         {
             Connections = new List<IElectricNode>();
+            instanceID = BarricadeManager.FindBarricadeByRootTransform(gameObject.transform).instanceID;
         }
 
         public void AddConnection(IElectricNode other)

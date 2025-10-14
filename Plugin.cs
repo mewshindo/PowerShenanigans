@@ -25,7 +25,7 @@ namespace PowerShenanigans
         public static Plugin Instance;
         public Resources _resources;
 
-        private HashSet<IElectricNode> nodes = new HashSet<IElectricNode>();
+        private readonly Dictionary<uint, IElectricNode> nodes = new Dictionary<uint, IElectricNode>();
 
         private List<Guid> _WiringTools = new List<Guid>();
         private Dictionary<CSteamID, Transform> _SelectedNode = new Dictionary<CSteamID, Transform>();
@@ -40,6 +40,7 @@ namespace PowerShenanigans
             };
             CoolEvents.OnDequipRequested -= onDequipRequested;
             CoolEvents.OnEquipRequested -= onEquipRequested;
+            BarricadeDrop.OnSalvageRequested_Global -= onSalvageRequested_Global;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.UnpatchAll("com.mew.powerShenanigans");
@@ -59,6 +60,7 @@ namespace PowerShenanigans
             };
             CoolEvents.OnDequipRequested += onDequipRequested;
             CoolEvents.OnEquipRequested += onEquipRequested;
+            BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -68,6 +70,29 @@ namespace PowerShenanigans
             }
 
             
+        }
+
+        private void onSalvageRequested_Global(BarricadeDrop drop, SteamPlayer instigatorClient, ref bool shouldAllow)
+        {
+            if (drop == null)
+                return;
+
+            uint id = drop.instanceID;
+            if (!nodes.TryGetValue(id, out var node))
+                return;
+
+            // Unlink from all connected nodes
+            foreach (var connected in node.Connections.ToList())
+            {
+                connected.Connections.Remove(node);
+            }
+
+            node.Connections.Clear();
+            nodes.Remove(id);
+
+            UpdateAllNetworks(); // Recalculate power
+
+            Console.WriteLine($"Removed node {id} and unlinked from network.");
         }
 
         private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
@@ -95,7 +120,7 @@ namespace PowerShenanigans
                     if (drop.model.GetComponent<SupplierNode>() == null)
                         drop.model.gameObject.AddComponent<SupplierNode>();
                     var node = drop.model.GetComponent<SupplierNode>();
-                    nodes.Add(node);
+                    nodes[node.instanceID] = node;
                     if (drop.asset.id == 458) // Portable generator
                         node.MaxSupply = 500;
                     if(drop.asset.id == 1230) // Industrial generator
@@ -106,14 +131,14 @@ namespace PowerShenanigans
                     if (drop.model.GetComponent<SwitchNode>() == null)
                         drop.model.gameObject.AddComponent<SwitchNode>();
                     var node = drop.model.GetComponent<SwitchNode>();
-                    nodes.Add(node);
+                    nodes[node.instanceID] = node;
                 }
                 else if (isConsumer(drop.model))
                 {
                     if (drop.model.GetComponent<ConsumerNode>() == null)
                         drop.model.gameObject.AddComponent<ConsumerNode>();
                     var node = drop.model.GetComponent<ConsumerNode>();
-                    nodes.Add(node);
+                    nodes[node.instanceID] = node;
                     node.SetPowered(false);
                     if (drop.asset.id == 459) // Spotlight
                         node.consumption = 250;
@@ -486,7 +511,7 @@ namespace PowerShenanigans
             var stopwatch = Stopwatch.StartNew();
             var visited = new HashSet<IElectricNode>();
 
-            foreach (var node in nodes)
+            foreach (var node in nodes.Values)
             {
                 if (visited.Contains(node))
                     continue;
