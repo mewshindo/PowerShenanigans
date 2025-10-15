@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using HarmonyLib;
 using PowerShenanigans;
@@ -42,6 +43,7 @@ namespace PowerShenanigans
             CoolEvents.OnDequipRequested -= onDequipRequested;
             CoolEvents.OnEquipRequested -= onEquipRequested;
             BarricadeDrop.OnSalvageRequested_Global -= onSalvageRequested_Global;
+            UseableGun.OnAimingChanged_Global -= UseableGun_OnAimingChanged_Global;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.UnpatchAll("com.mew.powerShenanigans");
@@ -63,6 +65,7 @@ namespace PowerShenanigans
             CoolEvents.OnDequipRequested += onDequipRequested;
             CoolEvents.OnEquipRequested += onEquipRequested;
             BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
+            UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -71,6 +74,22 @@ namespace PowerShenanigans
                 Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
             }
 
+        }
+
+        private void UseableGun_OnAimingChanged_Global(UseableGun obj)
+        {
+            if (!_WiringTools.Contains(obj.equippedGunAsset.GUID))
+                return;
+
+            if (obj.isAiming)
+            {
+                BarricadeDrop barricadeDrop = Raycast.GetBarricade(obj.player, out _);
+                if (barricadeDrop != null && isElectricalComponent(barricadeDrop.model))
+                {
+                    IElectricNode node = barricadeDrop.model.GetComponent<IElectricNode>();
+                    obj.player.ServerShowHint($"Voltage: {node._voltage}", 2);
+                }
+            }
         }
 
         private void UseableGun_onBulletHit(UseableGun gun, BulletInfo bullet, InputInfo hit, ref bool shouldAllow)
@@ -164,7 +183,7 @@ namespace PowerShenanigans
                 return;
             }
 
-            // 🧩 Unlink if already connected
+            // Unlink if already connected
             if (electricNode1.Connections.Contains(electricNode2) || electricNode2.Connections.Contains(electricNode1))
             {
                 player.Player.ServerShowHint("Unlinked nodes!", 3f);
@@ -297,6 +316,13 @@ namespace PowerShenanigans
                         node.MaxSupply = 500;
                     if(drop.asset.id == 1230) // Industrial generator
                         node.MaxSupply = 2500;
+                }
+                else if(drop.model.GetComponent<InteractableSign>() != null)
+                {
+                    if (drop.model.GetComponent<TimerNode>() == null)
+                        drop.model.gameObject.AddComponent<TimerNode>();
+                    var node = drop.model.GetComponent<TimerNode>();
+                    nodes[node.instanceID] = node;
                 }
                 else if (isSwitch(drop))
                 {
@@ -510,6 +536,8 @@ namespace PowerShenanigans
                     sendEffectCool(player, t.position, _resources.node_power);
                 else if (node is SwitchNode)
                     sendEffectCool(player, t.position, _resources.node_switch);
+                else if(node is TimerNode)
+                    sendEffectCool(player, t.position, _resources.node_switch);
                 else
                     continue;
 
@@ -535,6 +563,8 @@ namespace PowerShenanigans
                     if (node is SupplierNode || connected is SupplierNode)
                         pathEffect = _resources.path_power;
                     else if (node is SwitchNode || connected is SwitchNode)
+                        pathEffect = _resources.path_switch;
+                    else if (node is TimerNode || connected is TimerNode)
                         pathEffect = _resources.path_switch;
                     else
                         pathEffect = _resources.path_consumer;
@@ -689,6 +719,8 @@ namespace PowerShenanigans
             if (barricade.GetComponent<InteractableFire>() != null) return true;
 
             if (barricade.GetComponent<InteractableGenerator>() != null) return true;
+
+            if (barricade.GetComponent<InteractableSign>() != null) return true;
 
             if (isConsumer(barricade)) return true;
             return false;
