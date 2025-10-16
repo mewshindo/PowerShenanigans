@@ -16,7 +16,7 @@ namespace PowerShenanigans.Nodes
             Destroy(this);
         }
         public uint _voltage { get; protected set; }
-        public uint instanceID { get; set; } 
+        public uint instanceID { get; set; }
 
         protected virtual void Awake()
         {

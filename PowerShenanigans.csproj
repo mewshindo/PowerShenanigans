@@ -127,6 +127,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>xcopy /Y "$(TargetPath)" "C:\Program Files (x86)\Steam\steamapps\common\U3DS\Servers\Default\Rocket\Plugins"</PostBuildEvent>
+    <PostBuildEvent>xcopy /Y "$(TargetPath)" "D:\SteamCMD\steamapps\common\U3DS\Servers\Default\Rocket\Plugins"</PostBuildEvent>
   </PropertyGroup>
 </Project>

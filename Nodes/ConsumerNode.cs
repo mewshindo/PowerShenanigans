@@ -28,7 +28,7 @@ namespace PowerShenanigans.Nodes
         }
         public override void IncreaseVoltage(uint amount)
         {
-            _voltage += amount;
+            _voltage = amount;
             CheckPowerStatus();
         }
 

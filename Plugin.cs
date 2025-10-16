@@ -26,6 +26,8 @@ namespace PowerShenanigans
         public static Plugin Instance;
         public Resources _resources;
 
+        public bool DevMode = true;
+
         private readonly Dictionary<uint, IElectricNode> nodes = new Dictionary<uint, IElectricNode>();
 
         private List<Guid> _WiringTools = new List<Guid>();
@@ -100,9 +102,9 @@ namespace PowerShenanigans
         private bool doesOwnDrop(BarricadeDrop drop, CSteamID steamid)
         {
             var dropdata = drop.GetServersideData();
-            if(dropdata.owner != 0 && dropdata.owner == (ulong)steamid)
+            if (dropdata.owner != 0 && dropdata.owner == (ulong)steamid)
                 return true;
-            if(dropdata.group != 0 && dropdata.group == (ulong)UnturnedPlayer.FromCSteamID(steamid).SteamGroupID)
+            if (dropdata.group != 0 && dropdata.group == (ulong)UnturnedPlayer.FromCSteamID(steamid).SteamGroupID)
                 return true;
             if (dropdata.group != 0 && dropdata.group == (ulong)UnturnedPlayer.FromCSteamID(steamid).Player.quests.groupID)
                 return true;
@@ -127,7 +129,7 @@ namespace PowerShenanigans
                 return;
             }
 
-            if(!doesOwnDrop(drop, steamid))
+            if (!doesOwnDrop(drop, steamid))
             {
                 ClearSelection(player);
                 player.Player.ServerShowHint("You do not own this barricade!", 3f);
@@ -183,7 +185,7 @@ namespace PowerShenanigans
                 return;
             }
 
-            // Unlink if already connected
+            // 🧩 Unlink if already connected
             if (electricNode1.Connections.Contains(electricNode2) || electricNode2.Connections.Contains(electricNode1))
             {
                 player.Player.ServerShowHint("Unlinked nodes!", 3f);
@@ -288,7 +290,7 @@ namespace PowerShenanigans
         }
         private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
         {
-            if(_WiringTools.Contains(asset.GUID))
+            if (_WiringTools.Contains(asset.GUID))
             {
                 DisplayNodes(equipment.player.channel.owner.playerID.steamID);
             }
@@ -296,7 +298,7 @@ namespace PowerShenanigans
 
         private void onDequipRequested(Player player, PlayerEquipment equipment, ref bool shouldAllow)
         {
-            if(_WiringTools.Contains(equipment.asset.GUID))
+            if (_WiringTools.Contains(equipment.asset.GUID))
             {
                 foreach (Guid guid in _resources.nodeeffects)
                     EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
@@ -314,10 +316,10 @@ namespace PowerShenanigans
                     nodes[node.instanceID] = node;
                     if (drop.asset.id == 458) // Portable generator
                         node.MaxSupply = 500;
-                    if(drop.asset.id == 1230) // Industrial generator
+                    if (drop.asset.id == 1230) // Industrial generator
                         node.MaxSupply = 2500;
                 }
-                else if(drop.model.GetComponent<InteractableSign>() != null)
+                else if (drop.model.GetComponent<InteractableSign>() != null)
                 {
                     if (drop.model.GetComponent<TimerNode>() == null)
                         drop.model.gameObject.AddComponent<TimerNode>();
@@ -526,7 +528,7 @@ namespace PowerShenanigans
                 Transform t = drop.model;
                 if (!t.TryGetComponent<IElectricNode>(out IElectricNode node))
                     continue;
-                if(!doesOwnDrop(drop, steamid))
+                if (!doesOwnDrop(drop, steamid))
                     continue;
 
                 // Choose node type effect
@@ -536,8 +538,8 @@ namespace PowerShenanigans
                     sendEffectCool(player, t.position, _resources.node_power);
                 else if (node is SwitchNode)
                     sendEffectCool(player, t.position, _resources.node_switch);
-                else if(node is TimerNode)
-                    sendEffectCool(player, t.position, _resources.node_switch);
+                else if (node is TimerNode)
+                    sendEffectCool(player, t.position, _resources.node_timer);
                 else
                     continue;
 
@@ -565,7 +567,7 @@ namespace PowerShenanigans
                     else if (node is SwitchNode || connected is SwitchNode)
                         pathEffect = _resources.path_switch;
                     else if (node is TimerNode || connected is TimerNode)
-                        pathEffect = _resources.path_switch;
+                        pathEffect = _resources.path_timer;
                     else
                         pathEffect = _resources.path_consumer;
 
@@ -586,9 +588,9 @@ namespace PowerShenanigans
 
                 var connected = GetConnectedNetwork(node, visited);
 
-                // Gather suppliers and consumers
                 var suppliers = connected.OfType<SupplierNode>().ToList();
                 var consumers = connected.OfType<ConsumerNode>().ToList();
+                var timers = connected.OfType<TimerNode>().ToList();
 
                 uint totalSupply = (uint)suppliers.Sum(s => s.MaxSupply);
                 uint totalConsumption = (uint)consumers.Sum(c => c.consumption);
@@ -596,17 +598,30 @@ namespace PowerShenanigans
                 // If any switch in the path is off, that branch won’t appear in connected list
                 if (totalConsumption > totalSupply)
                 {
-                    // Too much load — no one gets power
                     foreach (var c in consumers)
                         c.DecreaseVoltage(c._voltage);
                     continue;
                 }
 
-                // Distribute total supply evenly or proportionally
-                uint perConsumer = consumers.Count > 0 ? totalSupply / (uint)consumers.Count : 0;
+                var usedtimers = new List<uint>();
+
+                foreach (var t in timers)
+                {
+                    if (usedtimers.Contains(t.instanceID))
+                        continue;
+                    usedtimers.Add(t.instanceID);
+                    if (totalSupply > 0 && !t._activated)
+                        t.StartTimer();
+                    else if (totalSupply == 0)
+                    {
+                        t.DecreaseVoltage(t._voltage);
+                        t.StopIfRunning();
+                    }
+                    DebugLogger.Log($"[PowerShenanigans] TimerNode {t.instanceID}, activated={t._activated}, allowCurrent={t.allowCurrent}, isCountingDown={t.isCountingDown}");
+                }
 
                 foreach (var c in consumers)
-                    c.IncreaseVoltage(perConsumer);
+                    c.IncreaseVoltage(c.consumption);
             }
             stopwatch.Stop();
             Console.WriteLine($"[PowerShenanigans] Updated networks in {stopwatch.ElapsedMilliseconds} ms");
@@ -629,6 +644,16 @@ namespace PowerShenanigans
                 {
                     if (neighbor is SwitchNode sw && !sw.IsOn)
                         continue; // block current flow
+                    if (neighbor is TimerNode tn && !tn.allowCurrent)
+                    {
+                        connected.Add(neighbor);
+                        visited.Add(neighbor);
+                        continue; // block current flow
+                    }
+                    else if(neighbor is TimerNode)
+                    {
+                        connected.Add(neighbor);
+                    }
 
                     if (!visited.Contains(neighbor))
                     {
@@ -640,6 +665,8 @@ namespace PowerShenanigans
 
             return connected;
         }
+
+
 
 
         //[HarmonyPatch(typeof(UseableMelee), "startPrimary")]

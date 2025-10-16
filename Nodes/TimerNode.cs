@@ -12,69 +12,94 @@ namespace PowerShenanigans.Nodes
 {
     public class TimerNode : BaseNode
     {
+        public bool allowCurrent = false;
         public bool isCountingDown = false;
         public float DelaySeconds = 5f;
+
         private float _remainingTime = 0f;
-        private bool _activated = false;
-
-        public Coroutine Coroutine;
+        public bool _activated = false;
         private InteractableSign _displaySign;
-        private string _signtext = "";
-        private IEnumerator TimerCoroutine(float time)
-        {
-            while (_remainingTime > 0)
-            {
-                yield return new WaitForSeconds(1f);
-                _signtext = "";
-                _remainingTime -= 1f;
-                float percentagePassed = DelaySeconds / _remainingTime * 100;
-                for (int i = 0; i < percentagePassed; i++)
-                {
-                    _signtext += "|";
-                }
-                BarricadeManager.ServerSetSignText(_displaySign, _signtext);
-            }
+        private Coroutine _coroutine;
 
-            foreach (var conn in Connections)
-                conn.IncreaseVoltage(_voltage);
-            Plugin.Instance.UpdateAllNetworks();
-
-            isCountingDown = false;
-        }
         protected override void Awake()
         {
             base.Awake();
             _displaySign = GetComponent<InteractableSign>();
         }
 
-        public void StartTimer()
-        {
-            isCountingDown = true;
-            Coroutine = StartCoroutine(TimerCoroutine(DelaySeconds));
-        }
-
         public override void IncreaseVoltage(uint amount)
         {
+            if (_activated || isCountingDown)
+                return;
+
             _voltage = amount;
-            if (!_activated)
-            {
-                _activated = true;
-                StartTimer();
-            }
+            StartTimer();
         }
+
 
         public override void DecreaseVoltage(uint amount)
         {
-            if (_voltage < amount) _voltage = 0;
-            else _voltage -= amount;
+            if (_voltage < amount)
+                _voltage = 0;
+            else
+                _voltage -= amount;
 
-            if(_voltage == 0)
+            if (_voltage == 0)
             {
-                _activated = false;
-            }
+                StopIfRunning();
 
-            foreach (var conn in Connections)
-                conn.DecreaseVoltage(amount);
+                if (_displaySign != null)
+                    BarricadeManager.ServerSetSignText(_displaySign, "OFF");
+            }
+            _activated = false;
+            allowCurrent = false;
+            isCountingDown = false;
+        }
+
+        public void StartTimer()
+        {
+            if(_activated || isCountingDown)
+                return;
+            DebugLogger.Log($"[TimerNode {instanceID}] Starting countdown for {DelaySeconds} seconds at {_voltage}V.");
+            _remainingTime = DelaySeconds;
+            isCountingDown = true;
+            _activated = true;
+
+            _coroutine = StartCoroutine(TimerCoroutine());
+        }
+
+        private IEnumerator TimerCoroutine()
+        {
+            while (_remainingTime > 0f)
+            {
+                yield return new WaitForSeconds(1f);
+                _remainingTime--;
+
+                if (_displaySign != null)
+                {
+                    int bars = Mathf.RoundToInt((_remainingTime / DelaySeconds) * 10f);
+                    string progressBar = new string('|', bars);
+                    BarricadeManager.ServerSetSignText(_displaySign, $"{progressBar}");
+                }
+            }
+            isCountingDown = false;
+
+            DebugLogger.Log($"[TimerNode {instanceID}] Countdown finished — passing {_voltage}V forward.");
+
+            allowCurrent = true;
+            Plugin.Instance.UpdateAllNetworks();
+            _coroutine = null;
+        }
+
+        public void StopIfRunning()
+        {
+            if (_coroutine != null)
+            {
+                StopCoroutine(_coroutine);
+            }
         }
     }
+
+
+
 }
