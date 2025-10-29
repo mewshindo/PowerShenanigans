@@ -20,12 +20,7 @@ namespace PowerShenanigans.Nodes
             _generator = GetComponent<InteractableGenerator>();
         }
         public uint GetAvailablePower() => MaxSupply;
-        public override void IncreaseVoltage(uint amount)
-        {
-
-        }
-        public override void DecreaseVoltage(uint amount)
-        {
-        }
+        public override void IncreaseVoltage(uint amount) { }
+        public override void DecreaseVoltage(uint amount) { }
     }
 }

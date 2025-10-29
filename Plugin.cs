@@ -31,7 +31,9 @@ namespace PowerShenanigans
         private readonly Dictionary<uint, IElectricNode> nodes = new Dictionary<uint, IElectricNode>();
 
         private List<Guid> _WiringTools = new List<Guid>();
+        private Dictionary<Guid, CoolConsumerType> consumers = new Dictionary<Guid, CoolConsumerType>();
         private Dictionary<CSteamID, Transform> _SelectedNode = new Dictionary<CSteamID, Transform>();
+        private List<Transform> CropBarricade = new List<Transform>();
         protected override void Unload()
         {
             Level.onLevelLoaded -= onLevelLoaded;
@@ -68,6 +70,7 @@ namespace PowerShenanigans
             CoolEvents.OnEquipRequested += onEquipRequested;
             BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
             UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
+
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -115,7 +118,6 @@ namespace PowerShenanigans
         {
             var asset = gun.equippedGunAsset;
 
-            // Only handle Electrical Inspectors or special gun id
             if (!_WiringTools.Contains(asset.GUID))
                 return;
 
@@ -140,7 +142,6 @@ namespace PowerShenanigans
             if (!isElectricalComponent(model))
                 return;
 
-            // 🟢 Case 1: Selecting the first node
             if (!_SelectedNode.ContainsKey(steamid))
             {
                 _SelectedNode[steamid] = model;
@@ -150,11 +151,9 @@ namespace PowerShenanigans
                 return;
             }
 
-            // 🟠 Case 2: Attempting to link with a second node
             var node1 = _SelectedNode[steamid];
             var node2 = model;
 
-            // Same node clicked again → deselect
             if (node1 == node2)
             {
                 _SelectedNode.Remove(steamid);
@@ -162,7 +161,6 @@ namespace PowerShenanigans
                 return;
             }
 
-            // Validate components
             if (!isElectricalComponent(node1) || !isElectricalComponent(node2))
             {
                 ClearSelection(player);
@@ -185,7 +183,6 @@ namespace PowerShenanigans
                 return;
             }
 
-            // 🧩 Unlink if already connected
             if (electricNode1.Connections.Contains(electricNode2) || electricNode2.Connections.Contains(electricNode1))
             {
                 player.Player.ServerShowHint("Unlinked nodes!", 3f);
@@ -193,9 +190,8 @@ namespace PowerShenanigans
                 electricNode1.Connections.Remove(electricNode2);
                 electricNode2.Connections.Remove(electricNode1);
 
-                updateNodesDisplay(steamid);
+                UpdateNodesDisplay(steamid);
 
-                // If a node loses all connections, reset its voltage
                 if (electricNode1.Connections.Count == 0)
                     electricNode1.DecreaseVoltage(electricNode1._voltage);
                 if (electricNode2.Connections.Count == 0)
@@ -216,7 +212,7 @@ namespace PowerShenanigans
             player.Player.ServerShowHint($"Linked {node1.name} ↔ {node2.name}", 5f);
 
             UpdateAllNetworks();
-            updateNodesDisplay(steamid);
+            UpdateNodesDisplay(steamid);
             _SelectedNode.Remove(steamid);
         }
 
@@ -242,7 +238,6 @@ namespace PowerShenanigans
                 return;
             }
 
-            // Unlink from all connected nodes
             foreach (var connected in node.Connections.ToList())
             {
                 connected.Connections.Remove(node);
@@ -250,8 +245,8 @@ namespace PowerShenanigans
 
             node.Connections.Clear();
             nodes.Remove(id);
-            updateNodesDisplay(instigatorClient.playerID.steamID);
-            UpdateAllNetworks(); // Recalculate power
+            UpdateNodesDisplay(instigatorClient.playerID.steamID);
+            UpdateAllNetworks();
 
             Console.WriteLine($"Removed node {id} and unlinked from network.");
         }
@@ -260,13 +255,14 @@ namespace PowerShenanigans
             Level.info.configData.Has_Global_Electricity = true;
             _resources = new Resources();
 
-            foreach (BarricadeRegion reg in BarricadeManager.regions)
+            foreach (BarricadeRegion reg in BarricadeManager.regions) // Initialize electric components
             {
                 foreach (BarricadeDrop drop in reg.drops)
                 {
                     onBarricadeSpawned(reg, drop);
                 }
             }
+
             var stopwatch = Stopwatch.StartNew();
 
             List<ItemGunAsset> wiringtools = new List<ItemGunAsset>();
@@ -347,6 +343,8 @@ namespace PowerShenanigans
 
                 }
             }
+            if (drop.model.GetComponent<InteractableFarm>() != null)
+                CropBarricade.Add(drop.model);
         }
         private void ClearSelection(UnturnedPlayer player)
         {
@@ -354,10 +352,9 @@ namespace PowerShenanigans
             _SelectedNode.Remove(steamid);
         }
         /// <summary>
-        /// Resets and then displays nodes to the player
+        /// Updates node effects for the player
         /// </summary>
-        /// <param name="steamid"></param>
-        private void updateNodesDisplay(CSteamID steamid)
+        private void UpdateNodesDisplay(CSteamID steamid)
         {
             foreach (Guid guid in _resources.nodeeffects)
                 EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(steamid));
@@ -383,29 +380,6 @@ namespace PowerShenanigans
             if (isConsumer(node) && node.GetComponent<ConsumerNode>() == null)
                 node.gameObject.AddComponent<ConsumerNode>();
         }
-
-        private bool TryLinkNodes(IElectricNode a, IElectricNode b)
-        {
-            // Prevent invalid pairings
-            if (a is SupplierNode && b is SupplierNode)
-                return false;
-            if (a is ConsumerNode && b is ConsumerNode)
-                return false;
-
-            // Pick direction based on types
-            if (a is SupplierNode && b.GetType() != typeof(SupplierNode))
-                return Link(a, b);
-            if (b is SupplierNode && a.GetType() != typeof(SupplierNode))
-                return Link(b, a);
-            if (a is SwitchNode && b.GetType() != typeof(SwitchNode))
-                return Link(a, b);
-            if (b is SwitchNode && a.GetType() != typeof(SwitchNode))
-                return Link(b, a);
-
-            // Default: just link a → b
-            return Link(a, b);
-        }
-
         private bool Link(IElectricNode a, IElectricNode b)
         {
             if (a == null || b == null)
@@ -423,9 +397,19 @@ namespace PowerShenanigans
         {
             List<BarricadeDrop> result = new List<BarricadeDrop>();
             BarricadeRegion[,] regions = BarricadeManager.regions;
-            foreach (BarricadeRegion reg in regions)
+            if(radius == 0)
             {
-                foreach (BarricadeDrop drop in reg.drops)
+                foreach(var region in regions)
+                {
+                    foreach(var drop in region.drops)
+                    {
+                        result.Add(drop);
+                    }
+                }
+            }
+            foreach (var reg in regions)
+            {
+                foreach (var drop in reg.drops)
                 {
                     float dist = Vector3.Distance(center, drop.model.position);
                     if (dist < radius)
@@ -520,7 +504,6 @@ namespace PowerShenanigans
 
             Console.WriteLine($"Displayed nodes to {player.DisplayName}");
 
-            // Keep track of which connections we’ve already drawn
             HashSet<(IElectricNode, IElectricNode)> drawnConnections = new HashSet<(IElectricNode, IElectricNode)>();
 
             foreach (BarricadeDrop drop in getBarricadesInRadius(player.Position, 100f))
@@ -531,7 +514,6 @@ namespace PowerShenanigans
                 if (!doesOwnDrop(drop, steamid))
                     continue;
 
-                // Choose node type effect
                 if (node is ConsumerNode)
                     sendEffectCool(player, t.position, _resources.node_consumer);
                 else if (node is SupplierNode)
@@ -543,13 +525,11 @@ namespace PowerShenanigans
                 else
                     continue;
 
-                // Draw connections (paths)
                 foreach (IElectricNode connected in node.Connections)
                 {
                     if (connected == null)
                         continue;
 
-                    // Skip reversed duplicates (A↔B drawn only once)
                     var pair = (node, connected);
                     var reversed = (connected, node);
                     if (drawnConnections.Contains(pair) || drawnConnections.Contains(reversed))
@@ -595,7 +575,6 @@ namespace PowerShenanigans
                 uint totalSupply = (uint)suppliers.Sum(s => s.MaxSupply);
                 uint totalConsumption = (uint)consumers.Sum(c => c.consumption);
 
-                // If any switch in the path is off, that branch won’t appear in connected list
                 if (totalConsumption > totalSupply)
                 {
                     foreach (var c in consumers)
@@ -733,8 +712,6 @@ namespace PowerShenanigans
             if (barricade.GetComponent<InteractableOxygenator>() != null)
                 return true;
             if (barricade.GetComponent<InteractableSafezone>() != null)
-                return true;
-            if (barricade.GetComponent<InteractableBeacon>() != null)
                 return true;
 
             return false;

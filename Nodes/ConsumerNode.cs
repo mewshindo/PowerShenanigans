@@ -1,4 +1,5 @@
-﻿using SDG.Unturned;
+﻿using PowerShenanigans.Consumers;
+using SDG.Unturned;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,6 +18,7 @@ namespace PowerShenanigans.Nodes
         private InteractableOven _oven;
         private InteractableOxygenator _oxygenator;
         private InteractableSafezone _safezone;
+        private CoolConsumer _coolConsumer;
 
         protected override void Awake()
         {
@@ -25,6 +27,7 @@ namespace PowerShenanigans.Nodes
             _oven = GetComponent<InteractableOven>();
             _oxygenator = GetComponent<InteractableOxygenator>();
             _safezone = GetComponent<InteractableSafezone>();
+            _coolConsumer = GetComponent<CoolConsumer>();
         }
         public override void IncreaseVoltage(uint amount)
         {
@@ -52,6 +55,8 @@ namespace PowerShenanigans.Nodes
         {
             if (_spot != null)
                 BarricadeManager.ServerSetSpotPowered(_spot, powered);
+            else if(_coolConsumer != null)
+                _coolConsumer.SetActive(powered);
             else if (_oven != null)
                 BarricadeManager.ServerSetOvenLit(_oven, powered);
             else if (_oxygenator != null)

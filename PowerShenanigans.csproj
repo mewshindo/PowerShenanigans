@@ -112,6 +112,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config.cs" />
+    <Compile Include="Consumers\CoolConsumer.cs" />
+    <Compile Include="Consumers\Sprinkler.cs" />
     <Compile Include="CoolEvents.cs" />
     <Compile Include="DebugLogger.cs" />
     <Compile Include="Nodes\BaseNode.cs" />
