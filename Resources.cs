@@ -22,20 +22,20 @@ namespace PowerShenanigans
         public EffectAsset path_timer;
 
         public List<Guid> nodeeffects = new List<Guid>();
-        public Resources()
+        public void Init()
         {
             node_consumer = (EffectAsset)Assets.find(new Guid("ad1529d6692f473ead2ac79e70e273fb"));
             path_consumer = (EffectAsset)Assets.find(new Guid("0c3f255bcdb94ae0867de0c7de4d0f3e"));
-            
+
             node_power = (EffectAsset)Assets.find(new Guid("f9f8409f96fe4624a280181523e5966d"));
             path_power = (EffectAsset)Assets.find(new Guid("aa4bf9e416b248f8b6ae4e48b30382a7"));
-            
+
             node_switch = (EffectAsset)Assets.find(new Guid("8b7f38d937a0403eb99e97b535d9df83"));
             path_switch = (EffectAsset)Assets.find(new Guid("f8858fb1a24c4d70b1ca9a15e70606d5"));
 
             node_timer = (EffectAsset)Assets.find(new Guid("510beb5970b94441a248baed6e0d172d"));
             path_timer = (EffectAsset)Assets.find(new Guid("e0377b8351c945a797350447bd513a1e"));
-            
+
             nodeeffects.Add(node_consumer.GUID);
             nodeeffects.Add(node_power.GUID);
             nodeeffects.Add(node_switch.GUID);

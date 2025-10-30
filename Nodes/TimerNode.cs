@@ -10,7 +10,7 @@ using UnityEngine.PlayerLoop;
 
 namespace PowerShenanigans.Nodes
 {
-    public class TimerNode : BaseNode
+    public class TimerNode : Node
     {
         public bool allowCurrent = false;
         public bool isCountingDown = false;

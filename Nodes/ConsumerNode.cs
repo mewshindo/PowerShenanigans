@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace PowerShenanigans.Nodes
 {
-    public class ConsumerNode : BaseNode
+    public class ConsumerNode : Node
     {
         public uint consumption { get; set; }
         private bool isPowered;

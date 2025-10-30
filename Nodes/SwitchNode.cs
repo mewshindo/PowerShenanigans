@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace PowerShenanigans.Nodes
 {
-    public class SwitchNode : BaseNode
+    public class SwitchNode : Node
     {
         public bool IsOn { get; private set; } = true;
 

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace PowerShenanigans.Nodes
 {
-    public abstract class BaseNode : MonoBehaviour, IElectricNode
+    public abstract class Node : MonoBehaviour, IElectricNode
     {
         public ICollection<IElectricNode> Connections { get; set; }
         public void unInit()

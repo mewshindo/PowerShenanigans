@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace PowerShenanigans.Nodes
 {
-    public class SupplierNode : BaseNode
+    public class SupplierNode : Node
     {
         public uint MaxSupply { get; set; }
 

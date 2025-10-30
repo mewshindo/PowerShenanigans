@@ -12,9 +12,4 @@ namespace PowerShenanigans
         public bool isActive {  get; private set; }
         public abstract void SetActive(bool active);
     }
-    public enum CoolConsumerType
-    {
-        Sprinkler,
-
-    }
 }

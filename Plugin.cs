@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using HarmonyLib;
 using PowerShenanigans;
@@ -31,9 +32,45 @@ namespace PowerShenanigans
         private readonly Dictionary<uint, IElectricNode> nodes = new Dictionary<uint, IElectricNode>();
 
         private List<Guid> _WiringTools = new List<Guid>();
-        private Dictionary<Guid, CoolConsumerType> consumers = new Dictionary<Guid, CoolConsumerType>();
         private Dictionary<CSteamID, Transform> _SelectedNode = new Dictionary<CSteamID, Transform>();
-        private List<Transform> CropBarricade = new List<Transform>();
+
+        private List<Transform> CropBarricades = new List<Transform>();
+        protected override void Load()
+        {
+            Instance = this;
+            _resources = new Resources();
+
+            Level.onLevelLoaded += onLevelLoaded;
+            LightingManager.onTimeOfDayChanged += () =>
+            {
+                foreach (var crop in CropBarricades)
+                {
+                    InteractableFarm farm = crop.GetComponent<InteractableFarm>();
+                    if (farm != null)
+                    {
+
+                    }
+                }
+            };
+            BarricadeManager.onBarricadeSpawned += onBarricadeSpawned;
+            UseableGun.onBulletHit += UseableGun_onBulletHit;
+            UseableGun.onBulletSpawned += onBulletSpawned;
+            U.Events.OnPlayerConnected += (player) =>
+            {
+                player.Player.gameObject.AddComponent<CoolEvents>();
+            };
+            CoolEvents.OnDequipRequested += onDequipRequested;
+            CoolEvents.OnEquipRequested += onEquipRequested;
+            BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
+            UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
+
+            Harmony harmony = new Harmony("com.mew.powerShenanigans");
+            harmony.PatchAll();
+            foreach (MethodBase method in harmony.GetPatchedMethods())
+            {
+                Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
+            }
+        }
         protected override void Unload()
         {
             Level.onLevelLoaded -= onLevelLoaded;
@@ -52,35 +89,43 @@ namespace PowerShenanigans
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.UnpatchAll("com.mew.powerShenanigans");
             Instance = null;
+
         }
 
-        protected override void Load()
+        private void onLevelLoaded(int level)
         {
-            Instance = this;
+            _resources.Init();
 
-            Level.onLevelLoaded += onLevelLoaded;
-            BarricadeManager.onBarricadeSpawned += onBarricadeSpawned;
-            UseableGun.onBulletHit += UseableGun_onBulletHit;
-            UseableGun.onBulletSpawned += onBulletSpawned;
-            U.Events.OnPlayerConnected += (player) =>
+            foreach (BarricadeRegion reg in BarricadeManager.regions) // Initialize electric components
             {
-                player.Player.gameObject.AddComponent<CoolEvents>();
-            };
-            CoolEvents.OnDequipRequested += onDequipRequested;
-            CoolEvents.OnEquipRequested += onEquipRequested;
-            BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
-            UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
-
-
-            Harmony harmony = new Harmony("com.mew.powerShenanigans");
-            harmony.PatchAll();
-            foreach (MethodBase method in harmony.GetPatchedMethods())
-            {
-                Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
+                foreach (BarricadeDrop drop in reg.drops)
+                {
+                    onBarricadeSpawned(reg, drop);
+                }
             }
 
-        }
+            var stopwatch = Stopwatch.StartNew();
 
+            List<ItemGunAsset> wiringtools = new List<ItemGunAsset>();
+            Assets.find(wiringtools);
+
+            foreach (ItemGunAsset asset in wiringtools)
+            {
+                AssetParser parser = new AssetParser(asset.getFilePath());
+                if (parser.HasEntry("WiringTool"))
+                {
+                    _WiringTools.Add(asset.GUID);
+                }
+                else if (asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5") || asset.id == 1165)
+                {
+                    _WiringTools.Add(asset.GUID);
+                }
+            }
+
+
+            float milliseconds = stopwatch.ElapsedMilliseconds;
+            Console.WriteLine($"[Wired] Found {_WiringTools.Count} wiring tools, parsed {wiringtools.Count} item asset files, took {milliseconds} ms.");
+        }
         private void UseableGun_OnAimingChanged_Global(UseableGun obj)
         {
             if (!_WiringTools.Contains(obj.equippedGunAsset.GUID))
@@ -250,40 +295,6 @@ namespace PowerShenanigans
 
             Console.WriteLine($"Removed node {id} and unlinked from network.");
         }
-        private void onLevelLoaded(int level)
-        {
-            Level.info.configData.Has_Global_Electricity = true;
-            _resources = new Resources();
-
-            foreach (BarricadeRegion reg in BarricadeManager.regions) // Initialize electric components
-            {
-                foreach (BarricadeDrop drop in reg.drops)
-                {
-                    onBarricadeSpawned(reg, drop);
-                }
-            }
-
-            var stopwatch = Stopwatch.StartNew();
-
-            List<ItemGunAsset> wiringtools = new List<ItemGunAsset>();
-            Assets.find(wiringtools);
-
-            foreach (ItemGunAsset asset in wiringtools)
-            {
-                if (HasFlag(asset, "WiringTool"))
-                {
-                    _WiringTools.Add(asset.GUID);
-                }
-                else if (asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5") || asset.id == 1165)
-                {
-                    _WiringTools.Add(asset.GUID);
-                }
-            }
-
-
-            float milliseconds = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine($"[Wired] Found {_WiringTools.Count} wiring tools, parsed {wiringtools.Count} item asset files, took {milliseconds} ms.");
-        }
         private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
         {
             if (_WiringTools.Contains(asset.GUID))
@@ -344,7 +355,7 @@ namespace PowerShenanigans
                 }
             }
             if (drop.model.GetComponent<InteractableFarm>() != null)
-                CropBarricade.Add(drop.model);
+                CropBarricades.Add(drop.model);
         }
         private void ClearSelection(UnturnedPlayer player)
         {
@@ -701,6 +712,14 @@ namespace PowerShenanigans
                 return true;
             }
         }
+        [HarmonyPatch(typeof(InteractableFarm), "updatePlanted")]
+        private static class Patch_InteractableFarm_updatePlanted
+        {
+            private static void Postfix(InteractableFarm __instance, uint newPlanted)
+            {
+                Console.WriteLine($"newPlanted: {newPlanted}\n ProviderTime: {Provider.time}");
+            }
+        }
         private bool isConsumer(Transform barricade)
         {
             if (barricade == null) return false;
@@ -731,28 +750,16 @@ namespace PowerShenanigans
         }
         private bool isSwitch(BarricadeDrop drop)
         {
-            if (drop == null) return false;
-            if (drop.asset.id == 1272) return true;
-            if (HasFlag(drop.asset, "Switch"))
-                return true;
-            return false;
-        }
-        private bool HasFlag(Asset asset, string flag)
-        {
-            string path = asset.getFilePath();
-            if (!File.Exists(path))
+            if (drop == null) 
                 return false;
-
-            using (var reader = File.OpenText(path))
-            {
-                string line;
-                while ((line = reader.ReadLine()) != null)
-                {
-                    line = line.Trim();
-                    if (line.StartsWith(flag, StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
+            
+            if (drop.asset.id == 1272) 
+                return true;
+            
+            AssetParser parser = new AssetParser(drop.asset.getFilePath());
+            
+            if (parser.HasEntry("Switch"))
+                return true;
 
             return false;
         }

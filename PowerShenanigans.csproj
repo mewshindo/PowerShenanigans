@@ -111,12 +111,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AssetParser.cs" />
     <Compile Include="Config.cs" />
     <Compile Include="Consumers\CoolConsumer.cs" />
     <Compile Include="Consumers\Sprinkler.cs" />
     <Compile Include="CoolEvents.cs" />
     <Compile Include="DebugLogger.cs" />
-    <Compile Include="Nodes\BaseNode.cs" />
+    <Compile Include="Nodes\Node.cs" />
     <Compile Include="Nodes\ConsumerNode.cs" />
     <Compile Include="Nodes\IElectricNode.cs" />
     <Compile Include="Nodes\SupplierNode.cs" />
