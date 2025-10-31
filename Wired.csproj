@@ -7,7 +7,7 @@
     <ProjectGuid>{24D823B5-7CBC-4518-8B8C-70CE1B720AC6}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>PowerShenanigans</RootNamespace>
+    <RootNamespace>Wired</RootNamespace>
     <AssemblyName>Wired</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -112,6 +112,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssetParser.cs" />
+    <Compile Include="BarricadeFinder.cs" />
     <Compile Include="Config.cs" />
     <Compile Include="Consumers\CoolConsumer.cs" />
     <Compile Include="Consumers\Sprinkler.cs" />

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PowerShenanigans
+namespace Wired
 {
     public class Config : IRocketPluginConfiguration, IDefaultable
     {

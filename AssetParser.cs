@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace PowerShenanigans
+namespace Wired
 {
     public class AssetParser
     {

@@ -1,13 +1,8 @@
 ﻿using SDG.Unturned;
-using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
-namespace PowerShenanigans.Consumers
+namespace Wired.Consumers
 {
     public class Sprinkler : CoolConsumer
     {
@@ -19,33 +14,28 @@ namespace PowerShenanigans.Consumers
 
         public override void SetActive(bool active)
         {
-            if (active)
-            {
-                foreach(var crop in getCropsInRadius(effectiveRadius))
-                {
-                    crop.model.GetComponent<InteractableFarm>().updatePlanted(1u);
-                }
-            }
+            isActive = active;
         }
 
-        private List<BarricadeDrop> getCropsInRadius(float radius)
+        public List<Transform> GetCropsInRadius()
         {
-            List<BarricadeDrop> result = new List<BarricadeDrop>();
-            BarricadeRegion[,] regions = BarricadeManager.regions;
-            foreach (var reg in regions)
+            if (!isActive)
+                return null;
+
+            var crops = new List<Transform>();
+
+            var bfinder = new BarricadeFinder(this.gameObject.transform.position, effectiveRadius);
+            List<BarricadeDrop> drops = bfinder.GetBarricadesInRadius();
+            foreach (var drop in drops)
             {
-                foreach (var drop in reg.drops)
-                {
-                    if (drop.model.GetComponent<InteractableFarm>() == null)
-                        continue;
-                    float dist = Vector3.Distance(transform.position, drop.model.position);
-                    if (dist < radius)
-                    {
-                        result.Add(drop);
-                    }
-                }
+                if(drop.model.GetComponent <InteractableFarm>() == null) 
+                    continue;
+                if (!((ItemFarmAsset)drop.asset).shouldRainAffectGrowth)
+                    continue;
+
+                crops.Add(drop.model);
             }
-            return result;
+            return crops;
         }
     }
 }

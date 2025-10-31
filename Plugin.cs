@@ -1,57 +1,41 @@
 ﻿using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
 using HarmonyLib;
-using PowerShenanigans;
-using PowerShenanigans.Nodes;
-using Rocket.Core.Assets;
+using Wired.Nodes;
 using Rocket.Core.Plugins;
 using Rocket.Unturned;
 using Rocket.Unturned.Player;
 using SDG.Unturned;
 using Steamworks;
 using UnityEngine;
+using Wired.Consumers;
 
-namespace PowerShenanigans
+namespace Wired
 {
     public class Plugin : RocketPlugin<Config>
     {
         public static Plugin Instance;
-        public Resources _resources;
+        private Resources _resources;
 
         public bool DevMode = true;
 
-        private readonly Dictionary<uint, IElectricNode> nodes = new Dictionary<uint, IElectricNode>();
+        private readonly Dictionary<uint, IElectricNode> _nodes = new Dictionary<uint, IElectricNode>();
 
         private List<Guid> _WiringTools = new List<Guid>();
         private Dictionary<CSteamID, Transform> _SelectedNode = new Dictionary<CSteamID, Transform>();
 
-        private List<Transform> CropBarricades = new List<Transform>();
+
+        private Dictionary<Transform, bool> _farmTransformsAffectedBySprinklers = new Dictionary<Transform, bool>();
+        private List<Sprinkler> _sprinklers = new List<Sprinkler>();
         protected override void Load()
         {
             Instance = this;
             _resources = new Resources();
 
             Level.onLevelLoaded += onLevelLoaded;
-            LightingManager.onTimeOfDayChanged += () =>
-            {
-                foreach (var crop in CropBarricades)
-                {
-                    InteractableFarm farm = crop.GetComponent<InteractableFarm>();
-                    if (farm != null)
-                    {
-
-                    }
-                }
-            };
             BarricadeManager.onBarricadeSpawned += onBarricadeSpawned;
             UseableGun.onBulletHit += UseableGun_onBulletHit;
             UseableGun.onBulletSpawned += onBulletSpawned;
@@ -63,6 +47,8 @@ namespace PowerShenanigans
             CoolEvents.OnEquipRequested += onEquipRequested;
             BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
             UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
+
+            LightingManager.onTimeOfDayChanged += onTimeOfDayChanged;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -86,12 +72,28 @@ namespace PowerShenanigans
             BarricadeDrop.OnSalvageRequested_Global -= onSalvageRequested_Global;
             UseableGun.OnAimingChanged_Global -= UseableGun_OnAimingChanged_Global;
 
+            LightingManager.onTimeOfDayChanged -= onTimeOfDayChanged;
+
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.UnpatchAll("com.mew.powerShenanigans");
             Instance = null;
-
         }
 
+        private void onTimeOfDayChanged()
+        {
+            var sw = Stopwatch.StartNew();
+
+            foreach (var f in _farmTransformsAffectedBySprinklers)
+            {
+                if (f.Value == false)
+                    continue;
+
+                BarricadeManager.updateFarm(f.Key, f.Key.GetComponent<InteractableFarm>().planted + 1, true);
+            }
+
+            sw.Stop();
+            DebugLogger.Log($"Updated time of day, took {sw.ElapsedMilliseconds} ms");
+        }
         private void onLevelLoaded(int level)
         {
             _resources.Init();
@@ -121,7 +123,6 @@ namespace PowerShenanigans
                     _WiringTools.Add(asset.GUID);
                 }
             }
-
 
             float milliseconds = stopwatch.ElapsedMilliseconds;
             Console.WriteLine($"[Wired] Found {_WiringTools.Count} wiring tools, parsed {wiringtools.Count} item asset files, took {milliseconds} ms.");
@@ -275,9 +276,19 @@ namespace PowerShenanigans
                 nodeComp.unInit();
                 Console.WriteLine($"Removed node component from salvaged drop {drop.instanceID}");
             }
+            
+            
+            drop.model.TryGetComponent<CoolConsumer>(out var cc);
+            if (cc != null)
+            {
+                if(cc.transform.GetComponent<Sprinkler>() != null)
+                    _sprinklers.Remove((Sprinkler)cc);
+
+                cc.unInit();
+            }
 
             uint id = drop.instanceID;
-            if (!nodes.TryGetValue(id, out var node))
+            if (!_nodes.TryGetValue(id, out var node))
             {
                 Console.WriteLine($"No id in _nodes: {drop.instanceID}");
                 return;
@@ -289,9 +300,10 @@ namespace PowerShenanigans
             }
 
             node.Connections.Clear();
-            nodes.Remove(id);
+            _nodes.Remove(id);
             UpdateNodesDisplay(instigatorClient.playerID.steamID);
             UpdateAllNetworks();
+            UpdateFarmsAffected();
 
             Console.WriteLine($"Removed node {id} and unlinked from network.");
         }
@@ -320,7 +332,7 @@ namespace PowerShenanigans
                     if (drop.model.GetComponent<SupplierNode>() == null)
                         drop.model.gameObject.AddComponent<SupplierNode>();
                     var node = drop.model.GetComponent<SupplierNode>();
-                    nodes[node.instanceID] = node;
+                    _nodes[node.instanceID] = node;
                     if (drop.asset.id == 458) // Portable generator
                         node.MaxSupply = 500;
                     if (drop.asset.id == 1230) // Industrial generator
@@ -331,40 +343,45 @@ namespace PowerShenanigans
                     if (drop.model.GetComponent<TimerNode>() == null)
                         drop.model.gameObject.AddComponent<TimerNode>();
                     var node = drop.model.GetComponent<TimerNode>();
-                    nodes[node.instanceID] = node;
+                    _nodes[node.instanceID] = node;
                 }
                 else if (isSwitch(drop))
                 {
                     if (drop.model.GetComponent<SwitchNode>() == null)
                         drop.model.gameObject.AddComponent<SwitchNode>();
                     var node = drop.model.GetComponent<SwitchNode>();
-                    nodes[node.instanceID] = node;
+                    _nodes[node.instanceID] = node;
                 }
                 else if (isConsumer(drop.model))
                 {
                     if (drop.model.GetComponent<ConsumerNode>() == null)
                         drop.model.gameObject.AddComponent<ConsumerNode>();
                     var node = drop.model.GetComponent<ConsumerNode>();
-                    nodes[node.instanceID] = node;
+
+                    _nodes[node.instanceID] = node;
                     node.SetPowered(false);
+
                     if (drop.asset.id == 459) // Spotlight
                         node.consumption = 250;
                     if (drop.asset.id == 1222) // Cagelight
                         node.consumption = 25;
 
+                    if (drop.model.GetComponent<Sprinkler>() != null)
+                    {
+                        _sprinklers.Add(drop.model.GetComponent<Sprinkler>());
+                        UpdateFarmsAffected();
+                    }
                 }
             }
+
             if (drop.model.GetComponent<InteractableFarm>() != null)
-                CropBarricades.Add(drop.model);
+                _farmTransformsAffectedBySprinklers.Add(drop.model, false);
         }
         private void ClearSelection(UnturnedPlayer player)
         {
             var steamid = player.CSteamID;
             _SelectedNode.Remove(steamid);
         }
-        /// <summary>
-        /// Updates node effects for the player
-        /// </summary>
         private void UpdateNodesDisplay(CSteamID steamid)
         {
             foreach (Guid guid in _resources.nodeeffects)
@@ -403,76 +420,6 @@ namespace PowerShenanigans
 
             UpdateAllNetworks();
             return true;
-        }
-        private static List<BarricadeDrop> getBarricadesInRadius(Vector3 center, float radius)
-        {
-            List<BarricadeDrop> result = new List<BarricadeDrop>();
-            BarricadeRegion[,] regions = BarricadeManager.regions;
-            if(radius == 0)
-            {
-                foreach(var region in regions)
-                {
-                    foreach(var drop in region.drops)
-                    {
-                        result.Add(drop);
-                    }
-                }
-            }
-            foreach (var reg in regions)
-            {
-                foreach (var drop in reg.drops)
-                {
-                    float dist = Vector3.Distance(center, drop.model.position);
-                    if (dist < radius)
-                    {
-                        result.Add(drop);
-                    }
-                }
-            }
-            return result;
-        }
-        private List<Transform> getBarricadesInRadius(Vector3 center, float radius, EElectricalComponentType type)
-        {
-            List<Transform> result = new List<Transform>();
-            BarricadeRegion[,] regions = BarricadeManager.regions;
-            foreach (BarricadeRegion reg in regions)
-            {
-                foreach (BarricadeDrop drop in reg.drops)
-                {
-                    float dist = Vector3.Distance(center, drop.model.position);
-                    if (dist < radius)
-                    {
-                        switch (type)
-                        {
-                            case EElectricalComponentType.SWITCH:
-                                if (drop.model.GetComponent<InteractableFire>() != null)
-                                {
-                                    result.Add(drop.model);
-                                }
-                                break;
-                            case EElectricalComponentType.GENERATOR:
-                                if (drop.model.GetComponent<InteractableGenerator>() != null)
-                                {
-                                    result.Add(drop.model);
-                                }
-                                break;
-                            case EElectricalComponentType.CONSUMER:
-                                if (isConsumer(drop.model))
-                                {
-                                    result.Add(drop.model);
-                                }
-                                break;
-                            case EElectricalComponentType.OVEN:
-                                if (drop.model.GetComponent<InteractableOven>() != null)
-                                {
-                                    result.Add(drop.model);
-                                }
-                                break;
-                        }
-                    }
-                }
-            }
-            return result;
         }
         private void sendEffectCool(UnturnedPlayer player, Vector3 dropPosition, EffectAsset asset)
         {
@@ -517,7 +464,8 @@ namespace PowerShenanigans
 
             HashSet<(IElectricNode, IElectricNode)> drawnConnections = new HashSet<(IElectricNode, IElectricNode)>();
 
-            foreach (BarricadeDrop drop in getBarricadesInRadius(player.Position, 100f))
+            var bfinder = new BarricadeFinder(player.Position, 100f);
+            foreach (BarricadeDrop drop in bfinder.GetBarricadesInRadius())
             {
                 Transform t = drop.model;
                 if (!t.TryGetComponent<IElectricNode>(out IElectricNode node))
@@ -572,7 +520,7 @@ namespace PowerShenanigans
             var stopwatch = Stopwatch.StartNew();
             var visited = new HashSet<IElectricNode>();
 
-            foreach (var node in nodes.Values)
+            foreach (var node in _nodes.Values)
             {
                 if (visited.Contains(node))
                     continue;
@@ -640,7 +588,7 @@ namespace PowerShenanigans
                         visited.Add(neighbor);
                         continue; // block current flow
                     }
-                    else if(neighbor is TimerNode)
+                    else if (neighbor is TimerNode)
                     {
                         connected.Add(neighbor);
                     }
@@ -655,35 +603,71 @@ namespace PowerShenanigans
 
             return connected;
         }
+        private void UpdateFarmsAffected()
+        {
+            // TODO: gotta invoke this method if the barricade is moved by F6 transform tools
 
+            foreach (Transform t in _farmTransformsAffectedBySprinklers.Keys)
+            {
+                foreach (var spr in _sprinklers)
+                {
+                    if (!spr.isActive)
+                        continue;
 
+                    if (Vector3.Distance(t.position, spr.transform.position) <= spr.effectiveRadius)
+                        _farmTransformsAffectedBySprinklers[t] = true;
 
+                    break;
+                }
+            }
+        }
+        private bool isConsumer(Transform barricade)
+        {
+            if (barricade == null) return false;
 
-        //[HarmonyPatch(typeof(UseableMelee), "startPrimary")]
-        //private static class Patch_UseableMelee_startPrimary
-        //{
-        //    private static void Postfix(UseableMelee __instance)
-        //    {
-        //        if(!__instance.player.equipment.isBusy) 
-        //            return;
+            if (barricade.GetComponent<InteractableSpot>() != null)
+                return true;
+            if (barricade.GetComponent<InteractableOven>() != null)
+                return true;
+            if (barricade.GetComponent<InteractableOxygenator>() != null)
+                return true;
+            if (barricade.GetComponent<InteractableSafezone>() != null)
+                return true;
+            if (barricade.GetComponent<CoolConsumer>() != null)
+                return true;
 
-        //        Console.WriteLine($"Lil swing from {__instance.player.name} ! isBusy: {__instance.player.equipment.isBusy}");
-        //        return;
-        //    }
-        //}
-        //[HarmonyPatch(typeof(UseableMelee), "startSecondary")]
-        //private static class Patch_UseableMelee_startSecondary
-        //{
-        //    private static void Postfix(UseableMelee __instance)
-        //    {
-        //        if (!__instance.player.equipment.isBusy)
-        //            return;
+            return false;
+        }
+        private bool isElectricalComponent(Transform barricade)
+        {
+            if (barricade == null) return false;
 
-        //        Console.WriteLine($"Big swing from {__instance.player.name} ! isBusy: {__instance.player.equipment.isBusy}");
-        //        return;
-        //    }
-        //}
+            if (barricade.GetComponent<InteractableFire>() != null) return true;
 
+            if (barricade.GetComponent<InteractableGenerator>() != null) return true;
+
+            if (barricade.GetComponent<InteractableSign>() != null) return true;
+
+            if (barricade.GetComponent<CoolConsumer>() != null) return true;
+
+            if (isConsumer(barricade)) return true;
+            return false;
+        }
+        private bool isSwitch(BarricadeDrop drop)
+        {
+            if (drop == null)
+                return false;
+
+            if (drop.asset.id == 1272)
+                return true;
+
+            AssetParser parser = new AssetParser(drop.asset.getFilePath());
+
+            if (parser.HasEntry("Switch"))
+                return true;
+
+            return false;
+        }
         [HarmonyPatch(typeof(InteractableSpot), "ReceiveToggleRequest")]
         private static class Patch_InteractableSpot_ReceiveToggleRequest
         {
@@ -720,56 +704,5 @@ namespace PowerShenanigans
                 Console.WriteLine($"newPlanted: {newPlanted}\n ProviderTime: {Provider.time}");
             }
         }
-        private bool isConsumer(Transform barricade)
-        {
-            if (barricade == null) return false;
-
-            if (barricade.GetComponent<InteractableSpot>() != null)
-                return true;
-            if (barricade.GetComponent<InteractableOven>() != null)
-                return true;
-            if (barricade.GetComponent<InteractableOxygenator>() != null)
-                return true;
-            if (barricade.GetComponent<InteractableSafezone>() != null)
-                return true;
-
-            return false;
-        }
-        private bool isElectricalComponent(Transform barricade)
-        {
-            if (barricade == null) return false;
-
-            if (barricade.GetComponent<InteractableFire>() != null) return true;
-
-            if (barricade.GetComponent<InteractableGenerator>() != null) return true;
-
-            if (barricade.GetComponent<InteractableSign>() != null) return true;
-
-            if (isConsumer(barricade)) return true;
-            return false;
-        }
-        private bool isSwitch(BarricadeDrop drop)
-        {
-            if (drop == null) 
-                return false;
-            
-            if (drop.asset.id == 1272) 
-                return true;
-            
-            AssetParser parser = new AssetParser(drop.asset.getFilePath());
-            
-            if (parser.HasEntry("Switch"))
-                return true;
-
-            return false;
-        }
-
-    }
-    public enum EElectricalComponentType
-    {
-        GENERATOR,
-        CONSUMER,
-        OVEN,
-        SWITCH
     }
 }

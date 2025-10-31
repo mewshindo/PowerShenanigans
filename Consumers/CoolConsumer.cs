@@ -1,15 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
+﻿using UnityEngine;
 
-namespace PowerShenanigans
+namespace Wired
 {
     public abstract class CoolConsumer : MonoBehaviour
     {
-        public bool isActive {  get; private set; }
+        public bool isActive {  get; protected set; }
         public abstract void SetActive(bool active);
+        public void unInit()
+        {
+            Destroy(this);
+        }
     }
 }
