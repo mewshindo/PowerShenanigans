@@ -311,9 +311,9 @@ namespace Wired
                     var node = drop.model.GetComponent<TimerNode>();
                     _nodes[node.instanceID] = node;
                     AssetParser parser = new AssetParser(drop.asset.getFilePath());
-                    if(parser.HasEntry("TimerDelaySeconds"))
+                    if (parser.HasEntry("TimerDelaySeconds"))
                     {
-                        if(parser.TryGetFloat("TimerDelaySeconds", out var val))
+                        if (parser.TryGetFloat("TimerDelaySeconds", out var val))
                         {
                             node.DelaySeconds = val;
                         }
@@ -568,6 +568,10 @@ namespace Wired
                 {
                     foreach (var c in consumers)
                         c.DecreaseVoltage(c._voltage);
+                    foreach (var t in timers)
+                    {
+                        t.DecreaseVoltage(t._voltage);
+                    }
                     continue;
                 }
 
@@ -579,10 +583,10 @@ namespace Wired
                         continue;
                     usedtimers.Add(t.instanceID);
 
-                    
+
                     if (totalSupply > 0 && !t._activated)
                         t.StartTimer();
-                    
+
                     else if (totalSupply == 0)
                     {
                         t.DecreaseVoltage(t._voltage);
@@ -611,21 +615,20 @@ namespace Wired
                 var node = queue.Dequeue();
                 connected.Add(node);
 
+                if(node is TimerNode t && t.allowCurrent == false)
+                {
+                    continue; // block current flow
+                }
+
                 foreach (var neighbor in node.Connections)
                 {
                     if (neighbor is SwitchNode sw && !sw.IsOn)
                         continue; // block current flow
-                    if (neighbor is TimerNode tn && !tn.allowCurrent)
-                    {
-                        connected.Add(neighbor);
-                        visited.Add(neighbor);
-                        continue; // block current flow
-                    }
                     else if (neighbor is TimerNode)
                     {
                         connected.Add(neighbor);
                     }
-                    if(neighbor is ButtonNode bn && !bn.allowCurrent)
+                    if (neighbor is ButtonNode bn && !bn.allowCurrent)
                     {
                         connected.Add(neighbor);
                         visited.Add(neighbor);

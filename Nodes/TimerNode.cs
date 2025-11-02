@@ -55,7 +55,7 @@ namespace Wired.Nodes
 
         public void StartTimer()
         {
-            if(_activated || isCountingDown)
+            if (_activated || isCountingDown)
                 return;
             DebugLogger.Log($"[TimerNode {instanceID}] Starting countdown for {DelaySeconds} seconds at {_voltage}V.");
             _remainingTime = DelaySeconds;
@@ -79,7 +79,7 @@ namespace Wired.Nodes
                     int seconds = totalSeconds % 60;
 
                     int msTenths = (int)((_remainingTime - totalSeconds) * 10f);
-                    if(msTenths < 0) msTenths = 0;
+                    if (msTenths < 0) msTenths = 0;
 
                     string formattedTime = $"{minutes:D2}:{seconds:D2}";
                     BarricadeManager.ServerSetSignText(_displaySign, $"{formattedTime}");

@@ -33,6 +33,7 @@ namespace Wired.Nodes
             ButtonOn();
         }
 
+
         public override void DecreaseVoltage(uint amount)
         {
             if (_voltage < amount)

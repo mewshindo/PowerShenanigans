@@ -48,7 +48,7 @@ namespace Wired.Nodes
         {
             if (_spot != null)
                 BarricadeManager.ServerSetSpotPowered(_spot, powered);
-            else if(_coolConsumer != null)
+            else if (_coolConsumer != null)
                 _coolConsumer.SetActive(powered);
             else if (_oven != null)
                 BarricadeManager.ServerSetOvenLit(_oven, powered);
