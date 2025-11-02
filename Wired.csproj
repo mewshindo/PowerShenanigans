@@ -118,6 +118,7 @@
     <Compile Include="Consumers\Sprinkler.cs" />
     <Compile Include="CoolEvents.cs" />
     <Compile Include="DebugLogger.cs" />
+    <Compile Include="Nodes\ButtonNode.cs" />
     <Compile Include="Nodes\Node.cs" />
     <Compile Include="Nodes\ConsumerNode.cs" />
     <Compile Include="Nodes\IElectricNode.cs" />
@@ -128,6 +129,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Raycast.cs" />
     <Compile Include="Resources.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Misc\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

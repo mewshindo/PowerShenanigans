@@ -18,7 +18,13 @@ namespace Wired
         public EffectAsset node_timer;
         public EffectAsset path_timer;
 
+        public ItemBarricadeAsset generator_technical;
+
         public List<Guid> nodeeffects = new List<Guid>();
+
+        public List<Guid> WiringTools = new List<Guid>();
+        public List<Guid> Switches = new List<Guid>();
+        public List<Guid> Timers = new List<Guid>();
         public void Init()
         {
             node_consumer = (EffectAsset)Assets.find(new Guid("ad1529d6692f473ead2ac79e70e273fb"));
@@ -32,6 +38,8 @@ namespace Wired
 
             node_timer = (EffectAsset)Assets.find(new Guid("510beb5970b94441a248baed6e0d172d"));
             path_timer = (EffectAsset)Assets.find(new Guid("e0377b8351c945a797350447bd513a1e"));
+
+            generator_technical = (ItemBarricadeAsset)Assets.find(new Guid("101d13181ef1407ca583686f36663a0f"));
 
             nodeeffects.Add(node_consumer.GUID);
             nodeeffects.Add(node_power.GUID);

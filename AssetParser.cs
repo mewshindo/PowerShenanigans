@@ -30,5 +30,28 @@ namespace Wired
 
             return false;
         }
+
+        public bool TryGetFloat(string entry, out float value)
+        {
+            value = 0f;
+            if (!File.Exists(_path))
+                return false;
+
+            using (var reader = File.OpenText(_path))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    line = line.Trim();
+                    if (line.StartsWith(entry, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = float.TryParse(line.Split(' ')[1], out float result) ? result : 0;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
     }
 }

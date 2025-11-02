@@ -1,17 +1,13 @@
 ﻿using SDG.Unturned;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Wired
 {
     public class BarricadeFinder
     {
-        private float _radius;
-        private Vector3 _position;
+        private readonly float _radius;
+        private readonly Vector3 _position;
 
         public BarricadeFinder(Vector3 position = new Vector3(), float radius = 0f)
         {

@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace Wired.Nodes
 {
+    /// <summary>
+    /// Timers are signs, they wait for a specified delay before allowing current to pass through, while displaying a countdown via BarricadeManager.ServeretSignText().
+    /// </summary>
     public class TimerNode : Node
     {
         public bool allowCurrent = false;
@@ -71,9 +74,15 @@ namespace Wired.Nodes
 
                 if (_displaySign != null)
                 {
-                    int bars = Mathf.RoundToInt((_remainingTime / DelaySeconds) * 10f);
-                    string progressBar = new string('|', bars);
-                    BarricadeManager.ServerSetSignText(_displaySign, $"{progressBar}");
+                    int totalSeconds = (int)_remainingTime;
+                    int minutes = totalSeconds / 60;
+                    int seconds = totalSeconds % 60;
+
+                    int msTenths = (int)((_remainingTime - totalSeconds) * 10f);
+                    if(msTenths < 0) msTenths = 0;
+
+                    string formattedTime = $"{minutes:D2}:{seconds:D2}";
+                    BarricadeManager.ServerSetSignText(_displaySign, $"{formattedTime}");
                 }
             }
             isCountingDown = false;
@@ -93,7 +102,4 @@ namespace Wired.Nodes
             }
         }
     }
-
-
-
 }
