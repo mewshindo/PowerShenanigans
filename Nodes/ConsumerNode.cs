@@ -4,7 +4,7 @@ namespace Wired.Nodes
 {
     public class ConsumerNode : Node
     {
-        public uint consumption { get; set; }
+        public uint Consumption { get; set; }
         private bool isPowered;
 
         private InteractableSpot _spot;
@@ -24,19 +24,19 @@ namespace Wired.Nodes
         }
         public override void IncreaseVoltage(uint amount)
         {
-            _voltage = amount;
+            Voltage = amount;
             CheckPowerStatus();
         }
 
         public override void DecreaseVoltage(uint amount)
         {
-            _voltage = (_voltage < amount) ? 0 : _voltage - amount;
+            Voltage = (Voltage < amount) ? 0 : Voltage - amount;
             CheckPowerStatus();
         }
 
         private void CheckPowerStatus()
         {
-            bool newPowered = _voltage >= consumption;
+            bool newPowered = Voltage >= Consumption;
             if (isPowered != newPowered)
             {
                 isPowered = newPowered;

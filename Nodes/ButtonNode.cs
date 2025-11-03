@@ -29,19 +29,19 @@ namespace Wired.Nodes
             if (!allowCurrent)
                 return;
 
-            _voltage = amount;
+            Voltage = amount;
             ButtonOn();
         }
 
 
         public override void DecreaseVoltage(uint amount)
         {
-            if (_voltage < amount)
-                _voltage = 0;
+            if (Voltage < amount)
+                Voltage = 0;
             else
-                _voltage -= amount;
+                Voltage -= amount;
 
-            if (_voltage == 0)
+            if (Voltage == 0)
             {
                 StopIfRunning();
             }

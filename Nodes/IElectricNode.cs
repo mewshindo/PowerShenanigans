@@ -11,7 +11,7 @@ namespace Wired.Nodes
 
     public interface IElectricNode
     {
-        uint _voltage { get; }
+        uint Voltage { get; }
         uint instanceID { get; set; }
         ICollection<IElectricNode> Connections { get; set; }
         void AddConnection(IElectricNode node);

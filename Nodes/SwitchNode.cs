@@ -21,7 +21,7 @@ namespace Wired.Nodes
         {
             if (!IsOn) return;
 
-            _voltage = amount;
+            Voltage = amount;
             foreach (var conn in Connections)
                 conn.IncreaseVoltage(amount);
         }
@@ -30,8 +30,8 @@ namespace Wired.Nodes
         {
             if (!IsOn) return;
 
-            if (_voltage < amount) _voltage = 0;
-            else _voltage -= amount;
+            if (Voltage < amount) Voltage = 0;
+            else Voltage -= amount;
 
             foreach (var conn in Connections)
                 conn.DecreaseVoltage(amount);

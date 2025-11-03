@@ -4,7 +4,7 @@ namespace Wired.Nodes
 {
     public class SupplierNode : Node
     {
-        public uint MaxSupply { get; set; }
+        public uint Supply { get; set; }
 
         private InteractableGenerator _generator;
 
@@ -13,7 +13,7 @@ namespace Wired.Nodes
             base.Awake();
             _generator = GetComponent<InteractableGenerator>();
         }
-        public uint GetAvailablePower() => MaxSupply;
+        public uint GetAvailablePower() => Supply;
         public override void IncreaseVoltage(uint amount) { }
         public override void DecreaseVoltage(uint amount) { }
     }

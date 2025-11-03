@@ -9,12 +9,12 @@ namespace Wired.Nodes
     /// </summary>
     public class TimerNode : Node
     {
-        public bool allowCurrent = false;
-        public bool isCountingDown = false;
+        public bool AllowCurrent = false;
+        public bool IsCountingDown = false;
         public float DelaySeconds = 5f;
 
         private float _remainingTime = 0f;
-        public bool _activated = false;
+        public bool Activated = false;
         private InteractableSign _displaySign;
         private Coroutine _coroutine;
 
@@ -26,41 +26,37 @@ namespace Wired.Nodes
 
         public override void IncreaseVoltage(uint amount)
         {
-            if (_activated || isCountingDown)
+            if (Activated || IsCountingDown)
                 return;
 
-            _voltage = amount;
+            Voltage = amount;
             StartTimer();
         }
 
 
         public override void DecreaseVoltage(uint amount)
         {
-            if (_voltage < amount)
-                _voltage = 0;
+            if (Voltage < amount)
+                Voltage = 0;
             else
-                _voltage -= amount;
+                Voltage -= amount;
 
-            if (_voltage == 0)
+            if (Voltage == 0 && (IsCountingDown || Activated || AllowCurrent))
             {
                 StopIfRunning();
-
                 if (_displaySign != null)
                     BarricadeManager.ServerSetSignText(_displaySign, "OFF");
             }
-            _activated = false;
-            allowCurrent = false;
-            isCountingDown = false;
         }
 
         public void StartTimer()
         {
-            if (_activated || isCountingDown)
+            if (Activated || IsCountingDown)
                 return;
-            DebugLogger.Log($"[TimerNode {instanceID}] Starting countdown for {DelaySeconds} seconds at {_voltage}V.");
+            DebugLogger.Log($"[TimerNode {instanceID}] Starting countdown for {DelaySeconds} seconds at {Voltage}V.");
             _remainingTime = DelaySeconds;
-            isCountingDown = true;
-            _activated = true;
+            IsCountingDown = true;
+            Activated = true;
 
             _coroutine = StartCoroutine(TimerCoroutine());
         }
@@ -85,21 +81,25 @@ namespace Wired.Nodes
                     BarricadeManager.ServerSetSignText(_displaySign, $"{formattedTime}");
                 }
             }
-            isCountingDown = false;
+            IsCountingDown = false;
 
-            DebugLogger.Log($"[TimerNode {instanceID}] Countdown finished — passing {_voltage}V forward.");
+            DebugLogger.Log($"[TimerNode {instanceID}] Countdown finished — passing {Voltage}V forward.");
 
-            allowCurrent = true;
+            AllowCurrent = true;
             Plugin.Instance.UpdateAllNetworks();
             _coroutine = null;
         }
 
         public void StopIfRunning()
         {
+            DebugLogger.Log($"[TimerNode {instanceID}] Stopping countdown.");
             if (_coroutine != null)
             {
                 StopCoroutine(_coroutine);
             }
+            Activated = false;
+            AllowCurrent = false;
+            IsCountingDown = false;
         }
     }
 }

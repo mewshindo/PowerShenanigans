@@ -150,7 +150,7 @@ namespace Wired
                 if (barricadeDrop != null && IsElectricalComponent(barricadeDrop.model))
                 {
                     IElectricNode node = barricadeDrop.model.GetComponent<IElectricNode>();
-                    obj.player.ServerShowHint($"Voltage: {node._voltage}", 2);
+                    obj.player.ServerShowHint($"Voltage: {node.Voltage}", 2);
                 }
             }
         }
@@ -251,9 +251,9 @@ namespace Wired
                 UpdateNodesDisplay(steamid);
 
                 if (electricNode1.Connections.Count == 0)
-                    electricNode1.DecreaseVoltage(electricNode1._voltage);
+                    electricNode1.DecreaseVoltage(electricNode1.Voltage);
                 if (electricNode2.Connections.Count == 0)
-                    electricNode2.DecreaseVoltage(electricNode2._voltage);
+                    electricNode2.DecreaseVoltage(electricNode2.Voltage);
 
                 UpdateAllNetworks();
                 ClearSelection(player);
@@ -300,9 +300,9 @@ namespace Wired
                     var node = drop.model.GetComponent<SupplierNode>();
                     _nodes[node.instanceID] = node;
                     if (drop.asset.id == 458) // Portable generator
-                        node.MaxSupply = 500;
+                        node.Supply = 500;
                     if (drop.asset.id == 1230) // Industrial generator
-                        node.MaxSupply = 2500;
+                        node.Supply = 2500;
                 }
                 else if (_resources.Timers.Contains(drop.asset.GUID))
                 {
@@ -336,9 +336,9 @@ namespace Wired
                     node.SetPowered(false);
 
                     if (drop.asset.id == 459) // Spotlight
-                        node.consumption = 250;
+                        node.Consumption = 250;
                     if (drop.asset.id == 1222) // Cagelight
-                        node.consumption = 25;
+                        node.Consumption = 25;
 
                     if (drop.model.GetComponent<Sprinkler>() != null)
                     {
@@ -561,16 +561,18 @@ namespace Wired
                 var consumers = connected.OfType<ConsumerNode>().ToList();
                 var timers = connected.OfType<TimerNode>().ToList();
 
-                uint totalSupply = (uint)suppliers.Sum(s => s.MaxSupply);
-                uint totalConsumption = (uint)consumers.Sum(c => c.consumption);
+                uint totalSupply = (uint)suppliers.Sum(s => s.Supply);
+                uint totalConsumption = (uint)consumers.Sum(c => c.Consumption);
 
-                if (totalConsumption > totalSupply)
+                if (totalConsumption > totalSupply || suppliers.Count == 0)
                 {
                     foreach (var c in consumers)
-                        c.DecreaseVoltage(c._voltage);
+                        c.DecreaseVoltage(c.Voltage);
                     foreach (var t in timers)
                     {
-                        t.DecreaseVoltage(t._voltage);
+                        if(t.AllowCurrent == false)
+                            continue;
+                        t.DecreaseVoltage(t.Voltage);
                     }
                     continue;
                 }
@@ -584,19 +586,19 @@ namespace Wired
                     usedtimers.Add(t.instanceID);
 
 
-                    if (totalSupply > 0 && !t._activated)
-                        t.StartTimer();
+                    if (totalSupply > 0 && !t.Activated)
+                        t.IncreaseVoltage(1);
 
                     else if (totalSupply == 0)
                     {
-                        t.DecreaseVoltage(t._voltage);
-                        t.StopIfRunning();
+                        if (t.AllowCurrent == false)
+                            continue;
+                        t.DecreaseVoltage(t.Voltage);
                     }
-                    DebugLogger.Log($"[PowerShenanigans] TimerNode {t.instanceID}, activated={t._activated}, allowCurrent={t.allowCurrent}, isCountingDown={t.isCountingDown}");
                 }
 
                 foreach (var c in consumers)
-                    c.IncreaseVoltage(c.consumption);
+                    c.IncreaseVoltage(c.Consumption);
             }
             stopwatch.Stop();
             DebugLogger.Log($"[PowerShenanigans] Updated networks in {stopwatch.ElapsedMilliseconds} ms");
@@ -615,7 +617,7 @@ namespace Wired
                 var node = queue.Dequeue();
                 connected.Add(node);
 
-                if(node is TimerNode t && t.allowCurrent == false)
+                if(node is TimerNode t && t.AllowCurrent == false)
                 {
                     continue; // block current flow
                 }
@@ -624,17 +626,7 @@ namespace Wired
                 {
                     if (neighbor is SwitchNode sw && !sw.IsOn)
                         continue; // block current flow
-                    else if (neighbor is TimerNode)
-                    {
-                        connected.Add(neighbor);
-                    }
-                    if (neighbor is ButtonNode bn && !bn.allowCurrent)
-                    {
-                        connected.Add(neighbor);
-                        visited.Add(neighbor);
-                        continue; // block current flow
-                    }
-                    else if (neighbor is ButtonNode)
+                    if (neighbor is TimerNode)
                     {
                         connected.Add(neighbor);
                     }

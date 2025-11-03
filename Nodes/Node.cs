@@ -15,7 +15,7 @@ namespace Wired.Nodes
         {
             Destroy(this);
         }
-        public uint _voltage { get; protected set; }
+        public uint Voltage { get; protected set; }
         public uint instanceID { get; set; }
 
         protected virtual void Awake()
