@@ -1,10 +1,12 @@
 ﻿
 namespace Wired.Nodes
 {
-    public class SwitchNode : Node
+    /// <summary>
+    /// A remote receiver acts as a switch
+    /// </summary>
+    public class RemoteReceiver : Node
     {
         public bool IsOn { get; private set; } = true;
-
         public void Toggle(bool state)
         {
             IsOn = state;
@@ -21,5 +23,4 @@ namespace Wired.Nodes
             if (!IsOn) return;
         }
     }
-
 }

@@ -23,6 +23,7 @@ namespace Wired
         public List<Guid> nodeeffects = new List<Guid>();
 
         public List<Guid> WiringTools = new List<Guid>();
+        public List<Guid> RemoteTools = new List<Guid>();
         public List<Guid> Switches = new List<Guid>();
         public List<Guid> Timers = new List<Guid>();
         public void Init()

@@ -122,6 +122,7 @@
     <Compile Include="Nodes\Node.cs" />
     <Compile Include="Nodes\ConsumerNode.cs" />
     <Compile Include="Nodes\IElectricNode.cs" />
+    <Compile Include="Nodes\RemoteReceiver.cs" />
     <Compile Include="Nodes\SupplierNode.cs" />
     <Compile Include="Nodes\SwitchNode.cs" />
     <Compile Include="Nodes\TimerNode.cs" />

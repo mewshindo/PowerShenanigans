@@ -12,7 +12,6 @@ using SDG.Unturned;
 using Steamworks;
 using UnityEngine;
 using Wired.Consumers;
-using System.Linq.Expressions;
 
 namespace Wired
 {
@@ -25,7 +24,9 @@ namespace Wired
 
         private readonly Dictionary<uint, IElectricNode> _nodes = new Dictionary<uint, IElectricNode>();
 
-        private readonly Dictionary<CSteamID, Transform> _SelectedNode = new Dictionary<CSteamID, Transform>();
+        private readonly Dictionary<CSteamID, Transform> _selectedNode = new Dictionary<CSteamID, Transform>();
+
+        private readonly List<CSteamID> _remoteToolBindingMode = new List<CSteamID>();
 
         private readonly Dictionary<Transform, bool> _farmTransformsAffectedBySprinklers = new Dictionary<Transform, bool>();
         private readonly List<Sprinkler> _sprinklers = new List<Sprinkler>();
@@ -46,6 +47,8 @@ namespace Wired
             CoolEvents.OnEquipRequested += onEquipRequested;
             BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
             UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
+            NPCEventManager.onEvent += NPCEventManager_onEvent;
+            PlayerEquipment.OnInspectingUseable_Global += PlayerEquipment_OnInspectingUseable_Global;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -54,6 +57,7 @@ namespace Wired
                 Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
             }
         }
+
         protected override void Unload()
         {
             Level.onLevelLoaded -= onLevelLoaded;
@@ -93,7 +97,7 @@ namespace Wired
                 if (f.Value == false)
                     continue;
 
-                BarricadeManager.updateFarm(f.Key, f.Key.GetComponent<InteractableFarm>().planted + 1, true);
+                BarricadeManager.updateFarm(f.Key, f.Key.GetComponent<InteractableFarm>().planted + 60, true);
             }
 
             sw.Stop();
@@ -111,21 +115,19 @@ namespace Wired
             {
                 AssetParser parser = new AssetParser(asset.getFilePath());
                 if (parser.HasEntry("WiringTool"))
-                {
                     _resources.WiringTools.Add(asset.GUID);
-                }
+
+                else if (parser.HasEntry("RemoteTool"))
+                    _resources.RemoteTools.Add(asset.GUID);
+
                 else if (asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5") || asset.id == 1165)
-                {
                     _resources.WiringTools.Add(asset.GUID);
-                }
+
                 else if (parser.HasEntry("Switch"))
-                {
                     _resources.Switches.Add(asset.GUID);
-                }
+
                 else if (parser.HasEntry("Timer"))
-                {
                     _resources.Timers.Add(asset.GUID);
-                }
             }
 
             foreach (BarricadeRegion reg in BarricadeManager.regions)
@@ -200,21 +202,21 @@ namespace Wired
             if (!IsElectricalComponent(model))
                 return;
 
-            if (!_SelectedNode.ContainsKey(steamid))
+            if (!_selectedNode.ContainsKey(steamid))
             {
-                _SelectedNode[steamid] = model;
+                _selectedNode[steamid] = model;
                 player.Player.ServerShowHint(
                     $"Selected {drop.asset.name} ({drop.instanceID})\nShoot another component to link.\nShoot ground to clear selection.",
                     10f);
                 return;
             }
 
-            var node1 = _SelectedNode[steamid];
+            var node1 = _selectedNode[steamid];
             var node2 = model;
 
             if (node1 == node2)
             {
-                _SelectedNode.Remove(steamid);
+                _selectedNode.Remove(steamid);
                 player.Player.ServerShowHint("Cleared selection.", 3f);
                 return;
             }
@@ -271,7 +273,7 @@ namespace Wired
 
             UpdateAllNetworks();
             UpdateNodesDisplay(steamid);
-            _SelectedNode.Remove(steamid);
+            _selectedNode.Remove(steamid);
         }
         private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
         {
@@ -289,6 +291,64 @@ namespace Wired
                     EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
             }
         }
+
+        private void NPCEventManager_onEvent(Player instigatingPlayer, string eventId)
+        {
+            if (instigatingPlayer != null)
+            {
+                var equippeditem = instigatingPlayer.equipment;
+
+                if (equippeditem == null)
+                    return;
+
+                if (!_resources.RemoteTools.Contains(equippeditem.asset.GUID))
+                    return;
+                if (eventId == "Wired:RemoteLeftClick")
+                {
+                    
+                }
+                else if (eventId == "Wired:RemoteRightClick")
+                {
+
+                }
+            }
+        }
+        private void PlayerEquipment_OnInspectingUseable_Global(PlayerEquipment obj)
+        {
+            if(obj == null)
+                return;
+            if (obj.player == null)
+                return;
+
+            if (!_resources.RemoteTools.Contains(obj.asset.GUID))
+                return;
+
+            if(_remoteToolBindingMode.Contains(obj.player.channel.owner.playerID.steamID))
+            {
+                _remoteToolBindingMode.Remove(obj.player.channel.owner.playerID.steamID);
+                obj.player.ServerShowHint($"Didn't bind to anything!", 3f);
+                return;
+            }
+            BarricadeDrop drop = Raycast.GetBarricade(obj.player, out _);
+            if (drop == null)
+            {
+                obj.player.ServerShowHint($"Aim at a receiver to bind!", 3f);
+                return;
+            }
+            if (!DoesOwnDrop(drop, obj.player.channel.owner.playerID.steamID))
+                return;
+            IElectricNode node = drop.model.GetComponent<IElectricNode>();
+            if(node is RemoteReceiver rr)
+            {
+                obj.player.ServerShowHint($"Click a mouse button to bind this receiver to that button!", 3f);
+            }
+            else
+            {
+                obj.player.ServerShowHint($"Aim at a receiver to bind!", 3f);
+                return;
+            }
+        }
+
         private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
         {
             if (IsElectricalComponent(drop.model))
@@ -410,7 +470,7 @@ namespace Wired
         private void ClearSelection(UnturnedPlayer player)
         {
             var steamid = player.CSteamID;
-            _SelectedNode.Remove(steamid);
+            _selectedNode.Remove(steamid);
         }
         private void UpdateNodesDisplay(CSteamID steamid)
         {
@@ -600,6 +660,8 @@ namespace Wired
                 foreach (var c in consumers)
                     c.IncreaseVoltage(c.Consumption);
             }
+            UpdateFarmsAffected();
+
             stopwatch.Stop();
             DebugLogger.Log($"[PowerShenanigans] Updated networks in {stopwatch.ElapsedMilliseconds} ms");
         }
@@ -626,6 +688,8 @@ namespace Wired
                 {
                     if (neighbor is SwitchNode sw && !sw.IsOn)
                         continue; // block current flow
+                    if (neighbor is RemoteReceiver rr && !rr.IsOn)
+                        continue; // block current flow
                     if (neighbor is TimerNode)
                     {
                         connected.Add(neighbor);
@@ -649,6 +713,7 @@ namespace Wired
             {
                 foreach (var spr in _sprinklers)
                 {
+                    _farmTransformsAffectedBySprinklers[t] = false;
                     if (!spr.isActive)
                         continue;
 
@@ -706,6 +771,7 @@ namespace Wired
 
             return false;
         }
+
         [HarmonyPatch(typeof(InteractableSpot), "ReceiveToggleRequest")]
         private static class Patch_InteractableSpot_ReceiveToggleRequest
         {
