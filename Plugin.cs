@@ -294,6 +294,7 @@ namespace Wired
 
         private void NPCEventManager_onEvent(Player instigatingPlayer, string eventId)
         {
+            DebugLogger.Log($"NPCEvent broadcasted: {eventId}");
             if (instigatingPlayer != null)
             {
                 var equippeditem = instigatingPlayer.equipment;
@@ -745,13 +746,7 @@ namespace Wired
         {
             if (barricade == null) return false;
 
-            if (barricade.GetComponent<InteractableFire>() != null) return true;
-
             if (barricade.GetComponent<InteractableGenerator>() != null) return true;
-
-            if (barricade.GetComponent<InteractableSign>() != null) return true;
-
-            if (barricade.GetComponent<CoolConsumer>() != null) return true;
 
             if (IsConsumer(barricade)) return true;
             return false;
@@ -783,8 +778,13 @@ namespace Wired
                 {
                     return true;
                 }
-                var bdrop = BarricadeManager.FindBarricadeByRootTransform(__instance.transform);
-                if (Plugin.Instance._resources.Switches.Contains(bdrop.asset.GUID))
+                if (__instance.gameObject.GetComponent<RemoteReceiver>() != null)
+                {
+                    if (player.equipment.asset == null || !Instance._resources.RemoteTools.Contains(player.equipment.asset.GUID))
+                        return false;
+
+                }
+                if (__instance.gameObject.GetComponent<SwitchNode>() != null)
                 {
                     __instance.gameObject.GetComponent<SwitchNode>()?.Toggle(desiredPowered);
                     return true;
