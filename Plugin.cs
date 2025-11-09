@@ -207,8 +207,6 @@ namespace Wired
             }
 
             var model = drop.model;
-            if (!IsElectricalComponent(model))
-                return;
 
             if (!_selectedNode.ContainsKey(steamid))
             {
@@ -229,18 +227,12 @@ namespace Wired
                 return;
             }
 
-            if (!IsElectricalComponent(node1) || !IsElectricalComponent(node2))
-            {
-                ClearSelection(player);
-                return;
-            }
 
             var electricNode1 = node1.GetComponent<IElectricNode>();
             var electricNode2 = node2.GetComponent<IElectricNode>();
 
             if (electricNode1 == null || electricNode2 == null)
             {
-                player.Player.ServerShowHint("Invalid node structure.", 3f);
                 return;
             }
 
@@ -252,11 +244,6 @@ namespace Wired
                 electricNode2.Connections.Remove(electricNode1);
 
                 UpdateNodesDisplay(steamid);
-
-                if (electricNode1.Connections.Count == 0)
-                    electricNode1.DecreaseVoltage(electricNode1.Voltage);
-                if (electricNode2.Connections.Count == 0)
-                    electricNode2.DecreaseVoltage(electricNode2.Voltage);
 
                 UpdateAllNetworks();
                 ClearSelection(player);
@@ -278,18 +265,20 @@ namespace Wired
         }
         private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
         {
-            if (_resources.WiredAssets.ContainsKey(equipment.asset.GUID) && _resources.WiredAssets[equipment.asset.GUID] == WiredAssetType.WiringTool)
+            if (_resources.WiredAssets.TryGetValue(asset.GUID, out WiredAssetType type))
             {
-                DisplayNodes(equipment.player.channel.owner.playerID.steamID);
+                if (type == WiredAssetType.WiringTool)
+                    DisplayNodes(equipment.player.channel.owner.playerID.steamID);
             }
         }
 
         private void onDequipRequested(Player player, PlayerEquipment equipment, ref bool shouldAllow)
         {
-            if (_resources.WiredAssets.ContainsKey(equipment.asset.GUID) && _resources.WiredAssets[equipment.asset.GUID] == WiredAssetType.WiringTool)
+            if (_resources.WiredAssets.TryGetValue(equipment.asset.GUID, out WiredAssetType type))
             {
-                foreach (Guid guid in _resources.nodeeffects)
-                    EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
+                if (type == WiredAssetType.WiringTool)
+                    foreach (Guid guid in _resources.nodeeffects)
+                        EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
             }
         }
 
@@ -307,17 +296,17 @@ namespace Wired
                     return;
                 if (eventId == "Wired:RemoteLeftClick")
                 {
-                    
+                    Console.WriteLine("Wired:RemoteLeftClick");
                 }
                 else if (eventId == "Wired:RemoteRightClick")
                 {
-
+                    Console.WriteLine("Wired:RemoteRightClick");
                 }
             }
         }
         private void PlayerEquipment_OnInspectingUseable_Global(PlayerEquipment obj)
         {
-            if(obj == null)
+            if (obj == null)
                 return;
             if (obj.player == null)
                 return;
@@ -342,7 +331,7 @@ namespace Wired
             if (!DoesOwnDrop(drop, obj.player.channel.owner.playerID.steamID))
                 return;
             IElectricNode node = drop.model.GetComponent<IElectricNode>();
-            if(node is RemoteReceiverNode rr)
+            if (node is ReceiverNode rr)
             {
                 obj.player.ServerShowHint($"Click a mouse button to bind this receiver to that button!", 3f);
             }
@@ -355,20 +344,20 @@ namespace Wired
 
         private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
         {
-            if (IsElectricalComponent(drop.model))
+            if (drop.model.GetComponent<InteractableGenerator>() != null)
             {
-                if (drop.model.GetComponent<InteractableGenerator>() != null)
-                {
-                    if (drop.model.GetComponent<SupplierNode>() == null)
-                        drop.model.gameObject.AddComponent<SupplierNode>();
-                    var node = drop.model.GetComponent<SupplierNode>();
-                    _nodes[node.instanceID] = node;
-                    if (drop.asset.id == 458) // Portable generator
-                        node.Supply = 500;
-                    if (drop.asset.id == 1230) // Industrial generator
-                        node.Supply = 2500;
-                }
-                else if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.Timer)
+                if (drop.model.GetComponent<SupplierNode>() == null)
+                    drop.model.gameObject.AddComponent<SupplierNode>();
+                var node = drop.model.GetComponent<SupplierNode>();
+                _nodes[node.instanceID] = node;
+                if (drop.asset.id == 458) // Portable generator
+                    node.Supply = 500;
+                if (drop.asset.id == 1230) // Industrial generator
+                    node.Supply = 2500;
+            }
+            if (_resources.WiredAssets.TryGetValue(drop.asset.GUID, out WiredAssetType type))
+            {
+                if (type == WiredAssetType.Timer)
                 {
                     if (drop.model.GetComponent<TimerNode>() == null)
                         drop.model.gameObject.AddComponent<TimerNode>();
@@ -379,56 +368,76 @@ namespace Wired
                     {
                         node.DelaySeconds = val;
                     }
+                    Console.WriteLine($"Created a timer with delay {val}");
+                    return;
                 }
-                else if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.RemoteReceiver)
-                {
-                    if (drop.model.GetComponent<RemoteReceiverNode>() == null)
-                        drop.model.gameObject.AddComponent<RemoteReceiverNode>();
-                    var node = drop.model.GetComponent<RemoteReceiverNode>();
-                    _nodes[node.instanceID] = node;
-                }
-                else if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.Switch)
+                if (type == WiredAssetType.Switch)
                 {
                     if (drop.model.GetComponent<SwitchNode>() == null)
                         drop.model.gameObject.AddComponent<SwitchNode>();
                     var node = drop.model.GetComponent<SwitchNode>();
                     _nodes[node.instanceID] = node;
+                    return;
                 }
-
-                if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.RemoteTransmitter)
+                if (type == WiredAssetType.RemoteReceiver)
                 {
-                    if (drop.model.GetComponent<RemoteTransmitter>() == null)
-                        drop.model.gameObject.AddComponent<RemoteTransmitter>();
-                }
-                else if (IsConsumer(drop.model))
-                {
-                    if (drop.model.GetComponent<ConsumerNode>() == null)
-                        drop.model.gameObject.AddComponent<ConsumerNode>();
-                    var node = drop.model.GetComponent<ConsumerNode>();
-
+                    if (drop.model.GetComponent<ReceiverNode>() == null)
+                        drop.model.gameObject.AddComponent<ReceiverNode>();
+                    var node = drop.model.GetComponent<ReceiverNode>();
                     _nodes[node.instanceID] = node;
-                    node.SetPowered(false);
-
-                    if (drop.asset.id == 459) // Spotlight
-                        node.Consumption = 250;
-                    if (drop.asset.id == 1222) // Cagelight
-                        node.Consumption = 25;
+                    return;
                 }
-
-                if (drop.model.GetComponent<InteractableSpot>() != null)
+                if (type == WiredAssetType.RemoteTransmitter)
                 {
-                    if (!drop.model.GetComponent<InteractableSpot>().isWired || !drop.model.GetComponent<InteractableSpot>().isPowered)
+                    if (drop.model.GetComponent<Transmitter>() == null)
+                        drop.model.gameObject.AddComponent<Transmitter>();
+                }
+            }
+            if (IsConsumer(drop.model))
+            {
+                if (drop.model.GetComponent<ConsumerNode>() == null)
+                    drop.model.gameObject.AddComponent<ConsumerNode>();
+                var node = drop.model.GetComponent<ConsumerNode>();
+
+                _nodes[node.instanceID] = node;
+                node.SetPowered(false);
+
+                if (drop.asset.id == 459) // Spotlight
+                    node.Consumption = 250;
+                if (drop.asset.id == 1222) // Cagelight
+                    node.Consumption = 25;
+
+                if (drop.model.GetComponent<CoolConsumer>() != null)
+                {
+                    var cc = drop.model.GetComponent<CoolConsumer>();
+                    if (cc is Transmitter t)
                     {
-                        Barricade bar = new Barricade(_resources.generator_technical);
-                        Transform gen = BarricadeManager.dropNonPlantedBarricade(bar, drop.model.position, drop.model.rotation, 0, 0);
-                        BarricadeManager.sendFuel(gen, ((ItemGeneratorAsset)bar.asset).capacity);
+                        node.Consumption = 100;
+                    }
+                    else if (cc is Sprinkler s)
+                    {
+                        node.Consumption = 200;
+                        _sprinklers.Add(s);
+                    }
+                }
+            }
+
+            if (drop.model.GetComponent<InteractableSpot>() != null)
+            {
+                if (!drop.model.GetComponent<InteractableSpot>().isWired || !drop.model.GetComponent<InteractableSpot>().isPowered)
+                {
+                    Barricade bar = new Barricade(_resources.generator_technical);
+                    Transform gen = BarricadeManager.dropNonPlantedBarricade(bar, drop.model.position, drop.model.rotation, 0, 0);
+                    if (gen != null)
+                    {
+                        BarricadeManager.sendFuel(gen, 512);
                         BarricadeManager.ServerSetGeneratorPowered(gen.GetComponent<InteractableGenerator>(), true);
                     }
                 }
-
-                if (drop.model.GetComponent<InteractableFarm>() != null)
-                    _farmTransformsAffectedBySprinklers.Add(drop.model, false);
             }
+
+            if (drop.model.GetComponent<InteractableFarm>() != null)
+                _farmTransformsAffectedBySprinklers.Add(drop.model, false);
         }
 
         private void onModifySign(CSteamID instigator, InteractableSign sign, ref string text, ref bool shouldAllow)
@@ -436,10 +445,20 @@ namespace Wired
             BarricadeDrop drop = BarricadeManager.FindBarricadeByRootTransform(sign.transform);
             if (drop == null)
                 return;
-            var node = drop.model.GetComponent<RemoteTransmitter>();
+            var node = drop.model.GetComponent<Transmitter>();
             if (node != null)
             {
-                if(!node.TrySetFrequency(text, UnturnedPlayer.FromCSteamID(instigator).Player))
+                if (!node.TrySetFrequency(text, UnturnedPlayer.FromCSteamID(instigator).Player))
+                {
+                    shouldAllow = false;
+                    return;
+                }
+                shouldAllow = true;
+            }
+            var node2 = drop.model.GetComponent<ReceiverNode>();
+            if (node2 != null)
+            {
+                if (!node2.TrySetFrequency(text, UnturnedPlayer.FromCSteamID(instigator).Player))
                 {
                     shouldAllow = false;
                     return;
@@ -576,6 +595,8 @@ namespace Wired
                     sendEffectCool(player, t.position, _resources.node_switch);
                 else if (node is TimerNode)
                     sendEffectCool(player, t.position, _resources.node_timer);
+                else if (node is ReceiverNode)
+                    sendEffectCool(player, t.position, _resources.node_switch);
                 else
                     continue;
 
@@ -602,6 +623,8 @@ namespace Wired
                         pathEffect = _resources.path_switch;
                     else if (node is TimerNode || connected is TimerNode)
                         pathEffect = _resources.path_timer;
+                    else if(node is ReceiverNode || connected is ReceiverNode)
+                        pathEffect = _resources.path_switch;
                     else
                         pathEffect = _resources.path_consumer;
 
@@ -635,7 +658,7 @@ namespace Wired
                         c.DecreaseVoltage(c.Voltage);
                     foreach (var t in timers)
                     {
-                        if(t.AllowCurrent == false)
+                        if (t.AllowCurrent == false)
                             continue;
                         t.DecreaseVoltage(t.Voltage);
                     }
@@ -684,7 +707,7 @@ namespace Wired
                 var node = queue.Dequeue();
                 connected.Add(node);
 
-                if(node is TimerNode t && t.AllowCurrent == false)
+                if (node is TimerNode t && t.AllowCurrent == false)
                 {
                     continue; // block current flow
                 }
@@ -693,7 +716,7 @@ namespace Wired
                 {
                     if (neighbor is SwitchNode sw && !sw.IsOn)
                         continue; // block current flow
-                    if (neighbor is RemoteReceiverNode rr && !rr.IsOn)
+                    if (neighbor is ReceiverNode rr && !rr.IsOn)
                         continue; // block current flow
                     if (neighbor is TimerNode)
                     {
@@ -767,7 +790,7 @@ namespace Wired
                 {
                     return true;
                 }
-                if (__instance.gameObject.GetComponent<RemoteReceiverNode>() != null)
+                if (__instance.gameObject.GetComponent<ReceiverNode>() != null)
                 {
                     if (player.equipment.asset == null || !Instance._resources.WiredAssets.ContainsKey(player.equipment.asset.GUID) || Instance._resources.WiredAssets[player.equipment.asset.GUID] != WiredAssetType.RemoteTool)
                         return false;

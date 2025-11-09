@@ -48,13 +48,13 @@ namespace Wired.Nodes
         {
             if (_spot != null)
                 BarricadeManager.ServerSetSpotPowered(_spot, powered);
-            else if (_coolConsumer != null)
+            if (_coolConsumer != null)
                 _coolConsumer.SetActive(powered);
-            else if (_oven != null)
+            if (_oven != null)
                 BarricadeManager.ServerSetOvenLit(_oven, powered);
-            else if (_oxygenator != null)
+            if (_oxygenator != null)
                 BarricadeManager.ServerSetOxygenatorPowered(_oxygenator, powered);
-            else if (_safezone != null)
+            if (_safezone != null)
                 BarricadeManager.ServerSetSafezonePowered(_safezone, powered);
         }
     }

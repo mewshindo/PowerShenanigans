@@ -1,7 +1,6 @@
 ﻿
 using SDG.Unturned;
 using System;
-using System.Linq.Expressions;
 using UnityEngine;
 
 namespace Wired.Nodes
@@ -9,25 +8,35 @@ namespace Wired.Nodes
     /// <summary>
     /// A remote receiver acts as a switch
     /// </summary>
-    public class RemoteTransmitter : CoolConsumer
+    public class ReceiverNode : Node
     {
+        public bool IsOn { get; private set; } = true;
         public string Frequency { get; private set; }
-        public float Range { get; private set; } = 50f;
         private InteractableSign _displaySign;
-        private void Awake()
+        protected override void Awake()
         {
-            Frequency = (Mathf.Round((3f + UnityEngine.Random.Range(0.1f, 0.8f)) * 1000f) / 1000f).ToString();
-            var parser = new AssetParser(BarricadeManager.FindBarricadeByRootTransform(transform).asset.getFilePath());
-            if (parser.TryGetFloat("Transmitter_Range_Meters", out var val))
-            {
-                Range = val;
-            }
+            base.Awake();
+            Frequency = (Mathf.Round((3f + UnityEngine.Random.Range(0.2f, 0.8f)) * 1000f) / 1000f).ToString();
+            DebugLogger.Log($"Assigned frequency {Frequency} to transmitter");
+            
+            NPCEventManager.onEvent += OnSignalBroadcasted;
             _displaySign = GetComponent<InteractableSign>();
             if (_displaySign != null)
             {
                 BarricadeManager.ServerSetSignText(_displaySign, $"FREQ {Frequency}");
             }
-            DebugLogger.Log($"Assigned frequency {Frequency} to transmitter");
+        }
+        private void OnDestroy()
+        {
+            NPCEventManager.onEvent -= OnSignalBroadcasted;
+        }
+        private void OnSignalBroadcasted(Player instigatingPlayer, string signal)
+        {
+            if (!signal.StartsWith(this.Frequency))
+                return;
+            var value = signal.Split(':')[1];
+            Console.WriteLine($"Received a signal: {signal}, {value=="True"}");
+            Toggle(value == "True");
         }
         public bool TrySetFrequency(string signinput, Player instigator)
         {
@@ -36,7 +45,7 @@ namespace Wired.Nodes
                 if (!signinput.StartsWith("FREQ "))
                     throw new Exception();
                 var freq = signinput.Split(' ')[1];
-                if(freq.Length != 5)
+                if (freq.Length != 5)
                     throw new Exception();
                 if (!float.TryParse(freq, out var f))
                     throw new Exception();
@@ -56,14 +65,19 @@ namespace Wired.Nodes
             }
             return true;
         }
-        public override void SetActive(bool active)
+        public void Toggle(bool state)
         {
-            base.SetActive(active);
-            TransmitSignal();
+            IsOn = state;
         }
-        private void TransmitSignal()
+
+        public override void IncreaseVoltage(uint amount)
         {
-            NPCEventManager.broadcastEvent(null, $"{Frequency}:{isActive.ToString()}", false);
+            if (!IsOn) return;
+        }
+
+        public override void DecreaseVoltage(uint amount)
+        {
+            if (!IsOn) return;
         }
     }
 }
