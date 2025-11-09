@@ -8,7 +8,7 @@ namespace Wired.Nodes
     /// <summary>
     /// A remote receiver acts as a switch
     /// </summary>
-    public class RemoteReceiver : Node
+    public class RemoteReceiverNode : Node
     {
         public bool IsOn { get; private set; } = true;
         public string Frequency { get; private set; }
@@ -22,7 +22,7 @@ namespace Wired.Nodes
         }
         private void OnDestroy()
         {
-
+            NPCEventManager.onEvent -= OnSignalBroadcasted;
         }
         private void OnSignalBroadcasted(Player instigatingPlayer, string signal)
         {

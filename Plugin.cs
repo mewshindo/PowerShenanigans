@@ -49,6 +49,7 @@ namespace Wired
             UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
             NPCEventManager.onEvent += NPCEventManager_onEvent;
             PlayerEquipment.OnInspectingUseable_Global += PlayerEquipment_OnInspectingUseable_Global;
+            BarricadeManager.onModifySignRequested += onModifySign;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -57,6 +58,7 @@ namespace Wired
                 Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
             }
         }
+
 
         protected override void Unload()
         {
@@ -72,6 +74,8 @@ namespace Wired
             CoolEvents.OnEquipRequested -= onEquipRequested;
             BarricadeDrop.OnSalvageRequested_Global -= onSalvageRequested_Global;
             UseableGun.OnAimingChanged_Global -= UseableGun_OnAimingChanged_Global;
+            NPCEventManager.onEvent -= NPCEventManager_onEvent;
+            PlayerEquipment.OnInspectingUseable_Global -= PlayerEquipment_OnInspectingUseable_Global;
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.UnpatchAll("com.mew.powerShenanigans");
@@ -115,19 +119,22 @@ namespace Wired
             {
                 AssetParser parser = new AssetParser(asset.getFilePath());
                 if (parser.HasEntry("WiringTool"))
-                    _resources.WiringTools.Add(asset.GUID);
+                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.WiringTool);
 
                 else if (parser.HasEntry("RemoteTool"))
-                    _resources.RemoteTools.Add(asset.GUID);
-
-                else if (asset.GUID == new Guid("ce60ac5b55bf4d70937e83a69c76dae5") || asset.id == 1165)
-                    _resources.WiringTools.Add(asset.GUID);
+                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteTool);
 
                 else if (parser.HasEntry("Switch"))
-                    _resources.Switches.Add(asset.GUID);
+                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.Switch);
 
                 else if (parser.HasEntry("Timer"))
-                    _resources.Timers.Add(asset.GUID);
+                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.Timer);
+
+                else if (parser.HasEntry("RemoteReceiver"))
+                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteReceiver);
+
+                else if (parser.HasEntry("RemoteTransmitter"))
+                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteTransmitter);
             }
 
             foreach (BarricadeRegion reg in BarricadeManager.regions)
@@ -139,11 +146,14 @@ namespace Wired
             }
 
             float milliseconds = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine($"[Wired] Found: \n{_resources.WiringTools.Count} wiring tools \n{_resources.Switches.Count} switches, \n{_resources.Timers.Count} timers \nparsed {items.Count} item asset files, took {milliseconds} ms.");
+            Console.WriteLine($"[Wired] Found: \n{_resources.WiredAssets.Where(x => x.Value == WiredAssetType.WiringTool).Count()}" +
+                $" wiring tools \n{_resources.WiredAssets.Where(x => x.Value == WiredAssetType.Switch).Count()}" +
+                $" switches, \n{_resources.WiredAssets.Where(x => x.Value == WiredAssetType.Timer).Count()} timers \n" +
+                $"parsed {items.Count} item asset files, took {milliseconds} ms.");
         }
         private void UseableGun_OnAimingChanged_Global(UseableGun obj)
         {
-            if (!_resources.WiringTools.Contains(obj.equippedGunAsset.GUID))
+            if (!_resources.WiredAssets.ContainsKey(obj.equippedGunAsset.GUID) && _resources.WiredAssets[obj.equippedGunAsset.GUID] != WiredAssetType.WiringTool)
                 return;
 
             if (obj.isAiming)
@@ -159,7 +169,7 @@ namespace Wired
 
         private void UseableGun_onBulletHit(UseableGun gun, BulletInfo bullet, InputInfo hit, ref bool shouldAllow)
         {
-            if (_resources.WiringTools.Contains(gun.equippedGunAsset.GUID))
+            if (_resources.WiredAssets.ContainsKey(gun.equippedGunAsset.GUID) && _resources.WiredAssets[gun.equippedGunAsset.GUID] == WiredAssetType.WiringTool)
                 shouldAllow = false;
         }
         private bool DoesOwnDrop(BarricadeDrop drop, CSteamID steamid)
@@ -176,9 +186,7 @@ namespace Wired
 
         private void OnBulletSpawned(UseableGun gun, BulletInfo bullet)
         {
-            var asset = gun.equippedGunAsset;
-
-            if (!_resources.WiringTools.Contains(asset.GUID))
+            if (!_resources.WiredAssets.ContainsKey(gun.equippedGunAsset.GUID) && _resources.WiredAssets[gun.equippedGunAsset.GUID] != WiredAssetType.WiringTool)
                 return;
 
             var steamid = gun.player.channel.owner.playerID.steamID;
@@ -227,13 +235,6 @@ namespace Wired
                 return;
             }
 
-            if (!TryEnsureNodeScripts(node1, node2))
-            {
-                player.Player.ServerShowHint("One of the nodes is missing a component script! Cannot link.", 5f);
-                ClearSelection(player);
-                return;
-            }
-
             var electricNode1 = node1.GetComponent<IElectricNode>();
             var electricNode2 = node2.GetComponent<IElectricNode>();
 
@@ -277,7 +278,7 @@ namespace Wired
         }
         private void onEquipRequested(PlayerEquipment equipment, ItemJar jar, ItemAsset asset, ref bool shouldAllow)
         {
-            if (_resources.WiringTools.Contains(asset.GUID))
+            if (_resources.WiredAssets.ContainsKey(equipment.asset.GUID) && _resources.WiredAssets[equipment.asset.GUID] == WiredAssetType.WiringTool)
             {
                 DisplayNodes(equipment.player.channel.owner.playerID.steamID);
             }
@@ -285,7 +286,7 @@ namespace Wired
 
         private void onDequipRequested(Player player, PlayerEquipment equipment, ref bool shouldAllow)
         {
-            if (_resources.WiringTools.Contains(equipment.asset.GUID))
+            if (_resources.WiredAssets.ContainsKey(equipment.asset.GUID) && _resources.WiredAssets[equipment.asset.GUID] == WiredAssetType.WiringTool)
             {
                 foreach (Guid guid in _resources.nodeeffects)
                     EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(UnturnedPlayer.FromPlayer(player).CSteamID));
@@ -302,7 +303,7 @@ namespace Wired
                 if (equippeditem == null)
                     return;
 
-                if (!_resources.RemoteTools.Contains(equippeditem.asset.GUID))
+                if (!_resources.WiredAssets.ContainsKey(equippeditem.asset.GUID) || _resources.WiredAssets[equippeditem.asset.GUID] != WiredAssetType.RemoteTool)
                     return;
                 if (eventId == "Wired:RemoteLeftClick")
                 {
@@ -321,10 +322,12 @@ namespace Wired
             if (obj.player == null)
                 return;
 
-            if (!_resources.RemoteTools.Contains(obj.asset.GUID))
+            if (!_resources.WiredAssets.TryGetValue(obj.asset.GUID, out WiredAssetType value))
+                return;
+            if (value != WiredAssetType.RemoteTool)
                 return;
 
-            if(_remoteToolBindingMode.Contains(obj.player.channel.owner.playerID.steamID))
+            if (_remoteToolBindingMode.Contains(obj.player.channel.owner.playerID.steamID))
             {
                 _remoteToolBindingMode.Remove(obj.player.channel.owner.playerID.steamID);
                 obj.player.ServerShowHint($"Didn't bind to anything!", 3f);
@@ -339,7 +342,7 @@ namespace Wired
             if (!DoesOwnDrop(drop, obj.player.channel.owner.playerID.steamID))
                 return;
             IElectricNode node = drop.model.GetComponent<IElectricNode>();
-            if(node is RemoteReceiver rr)
+            if(node is RemoteReceiverNode rr)
             {
                 obj.player.ServerShowHint($"Click a mouse button to bind this receiver to that button!", 3f);
             }
@@ -365,27 +368,37 @@ namespace Wired
                     if (drop.asset.id == 1230) // Industrial generator
                         node.Supply = 2500;
                 }
-                else if (_resources.Timers.Contains(drop.asset.GUID))
+                else if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.Timer)
                 {
                     if (drop.model.GetComponent<TimerNode>() == null)
                         drop.model.gameObject.AddComponent<TimerNode>();
                     var node = drop.model.GetComponent<TimerNode>();
                     _nodes[node.instanceID] = node;
                     AssetParser parser = new AssetParser(drop.asset.getFilePath());
-                    if (parser.HasEntry("TimerDelaySeconds"))
+                    if (parser.TryGetFloat("Timer_Delay_Seconds", out var val))
                     {
-                        if (parser.TryGetFloat("TimerDelaySeconds", out var val))
-                        {
-                            node.DelaySeconds = val;
-                        }
+                        node.DelaySeconds = val;
                     }
                 }
-                else if (IsSwitch(drop))
+                else if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.RemoteReceiver)
+                {
+                    if (drop.model.GetComponent<RemoteReceiverNode>() == null)
+                        drop.model.gameObject.AddComponent<RemoteReceiverNode>();
+                    var node = drop.model.GetComponent<RemoteReceiverNode>();
+                    _nodes[node.instanceID] = node;
+                }
+                else if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.Switch)
                 {
                     if (drop.model.GetComponent<SwitchNode>() == null)
                         drop.model.gameObject.AddComponent<SwitchNode>();
                     var node = drop.model.GetComponent<SwitchNode>();
                     _nodes[node.instanceID] = node;
+                }
+
+                if (_resources.WiredAssets.ContainsKey(drop.asset.GUID) && _resources.WiredAssets[drop.asset.GUID] == WiredAssetType.RemoteTransmitter)
+                {
+                    if (drop.model.GetComponent<RemoteTransmitter>() == null)
+                        drop.model.gameObject.AddComponent<RemoteTransmitter>();
                 }
                 else if (IsConsumer(drop.model))
                 {
@@ -400,28 +413,39 @@ namespace Wired
                         node.Consumption = 250;
                     if (drop.asset.id == 1222) // Cagelight
                         node.Consumption = 25;
+                }
 
-                    if (drop.model.GetComponent<Sprinkler>() != null)
+                if (drop.model.GetComponent<InteractableSpot>() != null)
+                {
+                    if (!drop.model.GetComponent<InteractableSpot>().isWired || !drop.model.GetComponent<InteractableSpot>().isPowered)
                     {
-                        _sprinklers.Add(drop.model.GetComponent<Sprinkler>());
-                        UpdateFarmsAffected();
+                        Barricade bar = new Barricade(_resources.generator_technical);
+                        Transform gen = BarricadeManager.dropNonPlantedBarricade(bar, drop.model.position, drop.model.rotation, 0, 0);
+                        BarricadeManager.sendFuel(gen, ((ItemGeneratorAsset)bar.asset).capacity);
+                        BarricadeManager.ServerSetGeneratorPowered(gen.GetComponent<InteractableGenerator>(), true);
                     }
                 }
-            }
 
-            if (this.GetComponent<InteractableSpot>() != null)
+                if (drop.model.GetComponent<InteractableFarm>() != null)
+                    _farmTransformsAffectedBySprinklers.Add(drop.model, false);
+            }
+        }
+
+        private void onModifySign(CSteamID instigator, InteractableSign sign, ref string text, ref bool shouldAllow)
+        {
+            BarricadeDrop drop = BarricadeManager.FindBarricadeByRootTransform(sign.transform);
+            if (drop == null)
+                return;
+            var node = drop.model.GetComponent<RemoteTransmitter>();
+            if (node != null)
             {
-                if (!this.GetComponent<InteractableSpot>().isWired || !this.GetComponent<InteractableSpot>().isPowered)
+                if(!node.TrySetFrequency(text, UnturnedPlayer.FromCSteamID(instigator).Player))
                 {
-                    Barricade bar = new Barricade(_resources.generator_technical);
-                    Transform gen = BarricadeManager.dropNonPlantedBarricade(bar, drop.model.position, drop.model.rotation, 0, 0);
-                    BarricadeManager.sendFuel(gen, ((ItemGeneratorAsset)bar.asset).capacity);
-                    BarricadeManager.ServerSetGeneratorPowered(gen.GetComponent<InteractableGenerator>(), true);
+                    shouldAllow = false;
+                    return;
                 }
+                shouldAllow = true;
             }
-
-            if (drop.model.GetComponent<InteractableFarm>() != null)
-                _farmTransformsAffectedBySprinklers.Add(drop.model, false);
         }
         private void onSalvageRequested_Global(BarricadeDrop drop, SteamPlayer instigatorClient, ref bool shouldAllow)
         {
@@ -478,26 +502,6 @@ namespace Wired
             foreach (Guid guid in _resources.nodeeffects)
                 EffectManager.ClearEffectByGuid(guid, Provider.findTransportConnection(steamid));
             DisplayNodes(steamid);
-        }
-
-        private bool TryEnsureNodeScripts(Transform node1, Transform node2)
-        {
-            EnsureNodeScript(node1);
-            EnsureNodeScript(node2);
-
-            return node1.GetComponent<IElectricNode>() != null && node2.GetComponent<IElectricNode>() != null;
-        }
-
-        private void EnsureNodeScript(Transform node)
-        {
-            if (node.GetComponent<InteractableGenerator>() != null && node.GetComponent<SupplierNode>() == null)
-                node.gameObject.AddComponent<SupplierNode>();
-
-            if (IsSwitch(node.GetComponent<BarricadeDrop>()) && node.GetComponent<SwitchNode>() == null)
-                node.gameObject.AddComponent<SwitchNode>();
-
-            if (IsConsumer(node) && node.GetComponent<ConsumerNode>() == null)
-                node.gameObject.AddComponent<ConsumerNode>();
         }
         private bool Link(IElectricNode a, IElectricNode b)
         {
@@ -689,7 +693,7 @@ namespace Wired
                 {
                     if (neighbor is SwitchNode sw && !sw.IsOn)
                         continue; // block current flow
-                    if (neighbor is RemoteReceiver rr && !rr.IsOn)
+                    if (neighbor is RemoteReceiverNode rr && !rr.IsOn)
                         continue; // block current flow
                     if (neighbor is TimerNode)
                     {
@@ -751,21 +755,6 @@ namespace Wired
             if (IsConsumer(barricade)) return true;
             return false;
         }
-        private bool IsSwitch(BarricadeDrop drop)
-        {
-            if (drop == null)
-                return false;
-
-            if (drop.asset.id == 1272)
-                return true;
-
-            AssetParser parser = new AssetParser(drop.asset.getFilePath());
-
-            if (parser.HasEntry("Switch"))
-                return true;
-
-            return false;
-        }
 
         [HarmonyPatch(typeof(InteractableSpot), "ReceiveToggleRequest")]
         private static class Patch_InteractableSpot_ReceiveToggleRequest
@@ -778,9 +767,9 @@ namespace Wired
                 {
                     return true;
                 }
-                if (__instance.gameObject.GetComponent<RemoteReceiver>() != null)
+                if (__instance.gameObject.GetComponent<RemoteReceiverNode>() != null)
                 {
-                    if (player.equipment.asset == null || !Instance._resources.RemoteTools.Contains(player.equipment.asset.GUID))
+                    if (player.equipment.asset == null || !Instance._resources.WiredAssets.ContainsKey(player.equipment.asset.GUID) || Instance._resources.WiredAssets[player.equipment.asset.GUID] != WiredAssetType.RemoteTool)
                         return false;
 
                 }

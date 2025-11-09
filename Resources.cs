@@ -22,10 +22,7 @@ namespace Wired
 
         public List<Guid> nodeeffects = new List<Guid>();
 
-        public List<Guid> WiringTools = new List<Guid>();
-        public List<Guid> RemoteTools = new List<Guid>();
-        public List<Guid> Switches = new List<Guid>();
-        public List<Guid> Timers = new List<Guid>();
+        public Dictionary<Guid, WiredAssetType> WiredAssets = new Dictionary<Guid, WiredAssetType>();
         public void Init()
         {
             node_consumer = (EffectAsset)Assets.find(new Guid("ad1529d6692f473ead2ac79e70e273fb"));
@@ -51,5 +48,14 @@ namespace Wired
             nodeeffects.Add(node_timer.GUID);
             nodeeffects.Add(path_timer.GUID);
         }
+    }
+    public enum WiredAssetType
+    {
+        WiringTool,
+        RemoteTool,
+        Switch,
+        Timer,
+        RemoteReceiver,
+        RemoteTransmitter
     }
 }
