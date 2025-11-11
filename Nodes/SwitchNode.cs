@@ -3,7 +3,7 @@ namespace Wired.Nodes
 {
     public class SwitchNode : Node
     {
-        public bool IsOn { get; private set; } = true;
+        public bool IsOn { get; private set; } = false;
 
         public void Toggle(bool state)
         {

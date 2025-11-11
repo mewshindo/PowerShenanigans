@@ -1,6 +1,7 @@
 ﻿
 using SDG.Unturned;
 using System;
+using System.Collections;
 using UnityEngine;
 
 namespace Wired.Nodes
@@ -10,7 +11,7 @@ namespace Wired.Nodes
     /// </summary>
     public class ReceiverNode : Node
     {
-        public bool IsOn { get; private set; } = true;
+        public bool IsOn { get; private set; } = false;
         public string Frequency { get; private set; }
         private InteractableSign _displaySign;
         protected override void Awake()
@@ -68,16 +69,25 @@ namespace Wired.Nodes
         public void Toggle(bool state)
         {
             IsOn = state;
+            if (Plugin.Instance.ReceiverCoroutineRunning)
+            {
+                StopAllCoroutines();
+                return;
+            }
+            else if (!Plugin.Instance.ReceiverCoroutineRunning)
+            {
+                Plugin.Instance.ReceiverCoroutineRunning = true;
+                StartCoroutine(DelayedUpdateNetworks());
+            }
+        }
+        IEnumerator DelayedUpdateNetworks()
+        {
+            yield return new WaitUntil(() => Plugin.Instance.UpdateFinished);
+            Plugin.Instance.UpdateAllNetworks();
         }
 
-        public override void IncreaseVoltage(uint amount)
-        {
-            if (!IsOn) return;
-        }
+        public override void IncreaseVoltage(uint amount) { }
 
-        public override void DecreaseVoltage(uint amount)
-        {
-            if (!IsOn) return;
-        }
+        public override void DecreaseVoltage(uint amount) { }
     }
 }

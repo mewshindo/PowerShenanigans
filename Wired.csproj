@@ -118,6 +118,7 @@
     <Compile Include="Consumers\Sprinkler.cs" />
     <Compile Include="CoolEvents.cs" />
     <Compile Include="DebugLogger.cs" />
+    <Compile Include="MetadataEditor.cs" />
     <Compile Include="Nodes\ButtonNode.cs" />
     <Compile Include="Nodes\Node.cs" />
     <Compile Include="Nodes\ConsumerNode.cs" />

@@ -58,12 +58,12 @@ namespace Wired.Nodes
         }
         public override void SetActive(bool active)
         {
+            TransmitSignal(active);
             base.SetActive(active);
-            TransmitSignal();
         }
-        private void TransmitSignal()
+        private void TransmitSignal(bool state)
         {
-            NPCEventManager.broadcastEvent(null, $"{Frequency}:{isActive.ToString()}", false);
+            NPCEventManager.broadcastEvent(null, $"{Frequency}:{state.ToString()}", false);
         }
     }
 }

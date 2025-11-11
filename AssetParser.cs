@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using static SDG.Unturned.ItemCurrencyAsset;
 
 namespace Wired
 {
@@ -27,7 +28,31 @@ namespace Wired
                         return true;
                 }
             }
+            return false;
+        }
+        public bool HasAnyEntry(string[] entries, out string foundentry)
+        {
+            foundentry = null;
+            if (!File.Exists(_path))
+                return false;
 
+            using (var reader = File.OpenText(_path))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    line = line.Trim();
+                    foreach(var entry in entries)
+                    {
+                        if (line.StartsWith(entry, StringComparison.OrdinalIgnoreCase))
+                        {
+                            foundentry = entry;
+                            return true;
+                        }
+
+                    }
+                }
+            }
             return false;
         }
 

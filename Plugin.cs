@@ -12,6 +12,7 @@ using SDG.Unturned;
 using Steamworks;
 using UnityEngine;
 using Wired.Consumers;
+using static UnityEngine.Random;
 
 namespace Wired
 {
@@ -45,11 +46,33 @@ namespace Wired
             };
             CoolEvents.OnDequipRequested += onDequipRequested;
             CoolEvents.OnEquipRequested += onEquipRequested;
+            PlayerEquipment.OnUseableChanged_Global += PlayerEquipment_OnUseableChanged_Global;
             BarricadeDrop.OnSalvageRequested_Global += onSalvageRequested_Global;
             UseableGun.OnAimingChanged_Global += UseableGun_OnAimingChanged_Global;
             NPCEventManager.onEvent += NPCEventManager_onEvent;
             PlayerEquipment.OnInspectingUseable_Global += PlayerEquipment_OnInspectingUseable_Global;
             BarricadeManager.onModifySignRequested += onModifySign;
+            BarricadeManager.onDamageBarricadeRequested += (CSteamID instigatorSteamID, Transform barricadeTransform, ref ushort pendingTotalDamage, ref bool shouldAllow, EDamageOrigin damageOrigin) =>
+            {
+                if (damageOrigin == EDamageOrigin.Charge_Self_Destruct)
+                {
+                    if (barricadeTransform.TryGetComponent<ConsumerNode>(out var c))
+                    {
+                        c.unInit();
+                        if(_nodes.ContainsKey(c.instanceID))
+                            _nodes.Remove(c.instanceID);
+                    }
+                }
+                else if (BarricadeManager.FindBarricadeByRootTransform(barricadeTransform).asset.health <= pendingTotalDamage)
+                {
+                    if (barricadeTransform.TryGetComponent<IElectricNode>(out var node))
+                    {
+                        node.unInit();
+                        if (_nodes.ContainsKey(node.instanceID))
+                            _nodes.Remove(node.instanceID);
+                    }
+                }
+            };
 
             Harmony harmony = new Harmony("com.mew.powerShenanigans");
             harmony.PatchAll();
@@ -58,8 +81,6 @@ namespace Wired
                 Console.WriteLine("Patched method: " + method.DeclaringType.FullName + "." + method.Name);
             }
         }
-
-
         protected override void Unload()
         {
             Level.onLevelLoaded -= onLevelLoaded;
@@ -118,23 +139,42 @@ namespace Wired
             foreach (ItemAsset asset in items)
             {
                 AssetParser parser = new AssetParser(asset.getFilePath());
-                if (parser.HasEntry("WiringTool"))
-                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.WiringTool);
-
-                else if (parser.HasEntry("RemoteTool"))
-                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteTool);
-
-                else if (parser.HasEntry("Switch"))
-                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.Switch);
-
-                else if (parser.HasEntry("Timer"))
-                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.Timer);
-
-                else if (parser.HasEntry("RemoteReceiver"))
-                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteReceiver);
-
-                else if (parser.HasEntry("RemoteTransmitter"))
-                    _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteTransmitter);
+                string[] stringstoparse = new string[] {
+                    "WiringTool",
+                    "RemoteTool",
+                    "Switch",
+                    "Timer",
+                    "RemoteReceiver",
+                    "RemoteTransmitter"
+                };
+                if (parser.HasAnyEntry(stringstoparse, out var foundentry))
+                {
+                    DebugLogger.Log($"Found wired asset: {asset.name} ({asset.GUID}) as {foundentry}");
+                    switch (foundentry)
+                    {
+                        default:
+                            break;
+                        case "WiringTool":
+                            _resources.WiredAssets.Add(asset.GUID, WiredAssetType.WiringTool);
+                            break;
+                        case "RemoteTool":
+                            _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteTool);
+                            break;
+                        case "Switch":
+                            _resources.WiredAssets.Add(asset.GUID, WiredAssetType.Switch);
+                            break;
+                        case "Timer":
+                            _resources.WiredAssets.Add(asset.GUID, WiredAssetType.Timer);
+                            break;
+                        case "RemoteReceiver":
+                            _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteReceiver);
+                            break;
+                        case "RemoteTransmitter":
+                            _resources.WiredAssets.Add(asset.GUID, WiredAssetType.RemoteTransmitter);
+                            break;
+                    }
+                }
+                
             }
 
             foreach (BarricadeRegion reg in BarricadeManager.regions)
@@ -144,7 +184,6 @@ namespace Wired
                     onBarricadeSpawned(reg, drop);
                 }
             }
-
             float milliseconds = stopwatch.ElapsedMilliseconds;
             Console.WriteLine($"[Wired] Found: \n{_resources.WiredAssets.Where(x => x.Value == WiredAssetType.WiringTool).Count()}" +
                 $" wiring tools \n{_resources.WiredAssets.Where(x => x.Value == WiredAssetType.Switch).Count()}" +
@@ -282,6 +321,10 @@ namespace Wired
             }
         }
 
+        private void PlayerEquipment_OnUseableChanged_Global(PlayerEquipment obj)
+        {
+        }
+
         private void NPCEventManager_onEvent(Player instigatingPlayer, string eventId)
         {
             DebugLogger.Log($"NPCEvent broadcasted: {eventId}");
@@ -296,11 +339,85 @@ namespace Wired
                     return;
                 if (eventId == "Wired:RemoteLeftClick")
                 {
-                    Console.WriteLine("Wired:RemoteLeftClick");
+                    if(instigatingPlayer.equipment.asset.GUID == null)
+                        return;
+                    if(!_resources.WiredAssets.ContainsKey(instigatingPlayer.equipment.asset.GUID) || _resources.WiredAssets[instigatingPlayer.equipment.asset.GUID] != WiredAssetType.RemoteTool)
+                        return;
+                    BarricadeDrop drop = Raycast.GetBarricade(instigatingPlayer, out _);
+                    if (drop == null)
+                    {
+                        MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
+                        if(metadataEditor.GetMetadata(out byte[] metadata))
+                        {
+                            foreach (byte b in metadata)
+                            {
+                                Console.Write(b + " ");
+                            }
+                            var fq = BitConverter.ToUInt16(metadata, 0);
+                            string freq = $"3.{fq}";
+                            NPCEventManager.broadcastEvent(null, $"3.{fq}:True", false);
+                        }
+                        return;
+                    }
+
+                    if (!DoesOwnDrop(drop, instigatingPlayer.channel.owner.playerID.steamID))
+                        return;
+                    IElectricNode node = drop.model.GetComponent<IElectricNode>();
+                    if(node != null && node is ReceiverNode rr)
+                    {
+                        Console.WriteLine($"Tried assigning {rr.Frequency.Substring(2)} to metadata");
+                        MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
+                        metadataEditor.SetMetadata(uint.Parse(rr.Frequency.Substring(2)));
+
+                        instigatingPlayer.ServerShowHint($"Bound frequency {rr.Frequency} MHz to left click!", 3f);
+
+                        metadataEditor.GetMetadata(out byte[] metadata);
+                        foreach (byte b in metadata)
+                        {
+                            Console.Write(b + " ");
+                        }
+                    }
                 }
                 else if (eventId == "Wired:RemoteRightClick")
                 {
-                    Console.WriteLine("Wired:RemoteRightClick");
+                    if (instigatingPlayer.equipment.asset.GUID == null)
+                        return;
+                    if (!_resources.WiredAssets.ContainsKey(instigatingPlayer.equipment.asset.GUID) || _resources.WiredAssets[instigatingPlayer.equipment.asset.GUID] != WiredAssetType.RemoteTool)
+                        return;
+                    BarricadeDrop drop = Raycast.GetBarricade(instigatingPlayer, out _);
+                    if (drop == null)
+                    {
+                        MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
+                        if (metadataEditor.GetMetadata(out byte[] metadata, 2))
+                        {
+                            foreach(byte b in metadata)
+                            {
+                                Console.Write(b + " ");
+                            }
+                            var fq = BitConverter.ToUInt16(metadata, 0);
+                            string freq = $"3.{fq}";
+                            NPCEventManager.broadcastEvent(null, $"3.{fq}:True", false);
+                        }
+                        return;
+                    }
+
+                    if (!DoesOwnDrop(drop, instigatingPlayer.channel.owner.playerID.steamID))
+                        return;
+                    IElectricNode node = drop.model.GetComponent<IElectricNode>();
+                    if (node != null && node is ReceiverNode rr)
+                    {
+                        Console.WriteLine($"Tried assigning {rr.Frequency.Substring(2)} to metadata");
+                        MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
+                        metadataEditor.SetMetadata(uint.Parse(rr.Frequency.Substring(2)), 2);
+
+                        instigatingPlayer.ServerShowHint($"Bound frequency {rr.Frequency} MHz to left click!", 3f);
+
+                        metadataEditor.GetMetadata(out byte[] metadata);
+                        foreach (byte b in metadata)
+                        {
+                            Console.Write(b + " ");
+                        }
+                    }
                 }
             }
         }
@@ -344,6 +461,10 @@ namespace Wired
 
         private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
         {
+            if(drop.model.GetComponent<IElectricNode>() != null)
+            {
+                return;
+            }
             if (drop.model.GetComponent<InteractableGenerator>() != null)
             {
                 if (drop.model.GetComponent<SupplierNode>() == null)
@@ -354,6 +475,7 @@ namespace Wired
                     node.Supply = 500;
                 if (drop.asset.id == 1230) // Industrial generator
                     node.Supply = 2500;
+                return;
             }
             if (_resources.WiredAssets.TryGetValue(drop.asset.GUID, out WiredAssetType type))
             {
@@ -371,7 +493,7 @@ namespace Wired
                     Console.WriteLine($"Created a timer with delay {val}");
                     return;
                 }
-                if (type == WiredAssetType.Switch)
+                else if (type == WiredAssetType.Switch)
                 {
                     if (drop.model.GetComponent<SwitchNode>() == null)
                         drop.model.gameObject.AddComponent<SwitchNode>();
@@ -379,7 +501,7 @@ namespace Wired
                     _nodes[node.instanceID] = node;
                     return;
                 }
-                if (type == WiredAssetType.RemoteReceiver)
+                else if (type == WiredAssetType.RemoteReceiver)
                 {
                     if (drop.model.GetComponent<ReceiverNode>() == null)
                         drop.model.gameObject.AddComponent<ReceiverNode>();
@@ -387,13 +509,21 @@ namespace Wired
                     _nodes[node.instanceID] = node;
                     return;
                 }
-                if (type == WiredAssetType.RemoteTransmitter)
+                else if (type == WiredAssetType.RemoteTransmitter)
                 {
                     if (drop.model.GetComponent<Transmitter>() == null)
                         drop.model.gameObject.AddComponent<Transmitter>();
+
+                    if (drop.model.GetComponent<ConsumerNode>() == null)
+                        drop.model.gameObject.AddComponent<ConsumerNode>();
+                    var node = drop.model.GetComponent<ConsumerNode>();
+
+                    _nodes[node.instanceID] = node;
+                    node.SetPowered(false);
+                    node.Consumption = 100;
                 }
             }
-            if (IsConsumer(drop.model))
+            else if (IsConsumer(drop.model))
             {
                 if (drop.model.GetComponent<ConsumerNode>() == null)
                     drop.model.gameObject.AddComponent<ConsumerNode>();
@@ -406,6 +536,8 @@ namespace Wired
                     node.Consumption = 250;
                 if (drop.asset.id == 1222) // Cagelight
                     node.Consumption = 25;
+                if (drop.asset.id == 1241) // Charge
+                    node.Consumption = 5;
 
                 if (drop.model.GetComponent<CoolConsumer>() != null)
                 {
@@ -632,9 +764,11 @@ namespace Wired
                 }
             }
         }
-
+        public bool UpdateFinished = true;
+        public bool ReceiverCoroutineRunning = false;
         public void UpdateAllNetworks()
         {
+            UpdateFinished = false;
             var stopwatch = Stopwatch.StartNew();
             var visited = new HashSet<IElectricNode>();
 
@@ -692,6 +826,8 @@ namespace Wired
 
             stopwatch.Stop();
             DebugLogger.Log($"[PowerShenanigans] Updated networks in {stopwatch.ElapsedMilliseconds} ms");
+            UpdateFinished = true;
+            ReceiverCoroutineRunning = false;
         }
 
         private List<IElectricNode> GetConnectedNetwork(IElectricNode root, HashSet<IElectricNode> visited)
@@ -763,6 +899,8 @@ namespace Wired
             if (barricade.GetComponent<InteractableOxygenator>() != null)
                 return true;
             if (barricade.GetComponent<InteractableSafezone>() != null)
+                return true;
+            if (barricade.GetComponent<InteractableCharge>() != null)
                 return true;
             if (barricade.GetComponent<CoolConsumer>() != null)
                 return true;

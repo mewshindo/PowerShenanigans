@@ -9,6 +9,8 @@ namespace Wired.Nodes
         public ICollection<IElectricNode> Connections { get; set; }
         public void unInit()
         {
+            DebugLogger.Log($"Destroyed node {instanceID}");
+            StopAllCoroutines();
             Destroy(this);
         }
         public uint Voltage { get; protected set; }

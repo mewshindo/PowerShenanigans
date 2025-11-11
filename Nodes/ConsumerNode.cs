@@ -1,4 +1,5 @@
 ﻿using SDG.Unturned;
+using Steamworks;
 
 namespace Wired.Nodes
 {
@@ -11,6 +12,7 @@ namespace Wired.Nodes
         private InteractableOven _oven;
         private InteractableOxygenator _oxygenator;
         private InteractableSafezone _safezone;
+        private InteractableCharge _charge;
         private CoolConsumer _coolConsumer;
 
         protected override void Awake()
@@ -20,6 +22,7 @@ namespace Wired.Nodes
             _oven = GetComponent<InteractableOven>();
             _oxygenator = GetComponent<InteractableOxygenator>();
             _safezone = GetComponent<InteractableSafezone>();
+            _charge = GetComponent<InteractableCharge>();
             _coolConsumer = GetComponent<CoolConsumer>();
         }
         public override void IncreaseVoltage(uint amount)
@@ -56,6 +59,8 @@ namespace Wired.Nodes
                 BarricadeManager.ServerSetOxygenatorPowered(_oxygenator, powered);
             if (_safezone != null)
                 BarricadeManager.ServerSetSafezonePowered(_safezone, powered);
+            if (_charge != null && powered)
+                _charge.detonate((CSteamID)BarricadeManager.FindBarricadeByRootTransform(_charge.transform).GetServersideData().owner);
         }
     }
 }
