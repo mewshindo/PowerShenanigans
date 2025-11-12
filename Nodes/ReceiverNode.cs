@@ -19,25 +19,11 @@ namespace Wired.Nodes
             base.Awake();
             Frequency = (Mathf.Round((3f + UnityEngine.Random.Range(0.2f, 0.8f)) * 1000f) / 1000f).ToString();
             DebugLogger.Log($"Assigned frequency {Frequency} to transmitter");
-            
-            NPCEventManager.onEvent += OnSignalBroadcasted;
             _displaySign = GetComponent<InteractableSign>();
             if (_displaySign != null)
             {
                 BarricadeManager.ServerSetSignText(_displaySign, $"FREQ {Frequency}");
             }
-        }
-        private void OnDestroy()
-        {
-            NPCEventManager.onEvent -= OnSignalBroadcasted;
-        }
-        private void OnSignalBroadcasted(Player instigatingPlayer, string signal)
-        {
-            if (!signal.StartsWith(this.Frequency))
-                return;
-            var value = signal.Split(':')[1];
-            Console.WriteLine($"Received a signal: {signal}, {value=="True"}");
-            Toggle(value == "True");
         }
         public bool TrySetFrequency(string signinput, Player instigator)
         {
@@ -66,26 +52,15 @@ namespace Wired.Nodes
             }
             return true;
         }
-        public void Toggle(bool state)
+        public void SetState(RadioSignalType state)
         {
-            IsOn = state;
-            if (Plugin.Instance.ReceiverCoroutineRunning)
+            if(state == RadioSignalType.Toggle)
             {
-                StopAllCoroutines();
+                IsOn = !IsOn;
                 return;
             }
-            else if (!Plugin.Instance.ReceiverCoroutineRunning)
-            {
-                Plugin.Instance.ReceiverCoroutineRunning = true;
-                StartCoroutine(DelayedUpdateNetworks());
-            }
+            IsOn = state == RadioSignalType.True;
         }
-        IEnumerator DelayedUpdateNetworks()
-        {
-            yield return new WaitUntil(() => Plugin.Instance.UpdateFinished);
-            Plugin.Instance.UpdateAllNetworks();
-        }
-
         public override void IncreaseVoltage(uint amount) { }
 
         public override void DecreaseVoltage(uint amount) { }

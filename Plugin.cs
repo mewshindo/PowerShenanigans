@@ -21,9 +21,11 @@ namespace Wired
         public static Plugin Instance;
         private Resources _resources;
 
+        public RadioManager RadioManager;
+
         public bool DevMode = true;
 
-        private readonly Dictionary<uint, IElectricNode> _nodes = new Dictionary<uint, IElectricNode>();
+        public readonly Dictionary<uint, IElectricNode> Nodes = new Dictionary<uint, IElectricNode>();
 
         private readonly Dictionary<CSteamID, Transform> _selectedNode = new Dictionary<CSteamID, Transform>();
 
@@ -59,8 +61,8 @@ namespace Wired
                     if (barricadeTransform.TryGetComponent<ConsumerNode>(out var c))
                     {
                         c.unInit();
-                        if(_nodes.ContainsKey(c.instanceID))
-                            _nodes.Remove(c.instanceID);
+                        if(Nodes.ContainsKey(c.instanceID))
+                            Nodes.Remove(c.instanceID);
                     }
                 }
                 else if (BarricadeManager.FindBarricadeByRootTransform(barricadeTransform).asset.health <= pendingTotalDamage)
@@ -68,8 +70,8 @@ namespace Wired
                     if (barricadeTransform.TryGetComponent<IElectricNode>(out var node))
                     {
                         node.unInit();
-                        if (_nodes.ContainsKey(node.instanceID))
-                            _nodes.Remove(node.instanceID);
+                        if (Nodes.ContainsKey(node.instanceID))
+                            Nodes.Remove(node.instanceID);
                     }
                 }
             };
@@ -131,6 +133,7 @@ namespace Wired
         {
             _resources.Init();
 
+            RadioManager = new GameObject("RadioManager", typeof(RadioManager)).GetComponent<RadioManager>();
             var stopwatch = Stopwatch.StartNew();
 
             List<ItemAsset> items = new List<ItemAsset>();
@@ -355,7 +358,7 @@ namespace Wired
                             }
                             var fq = BitConverter.ToUInt16(metadata, 0);
                             string freq = $"3.{fq}";
-                            NPCEventManager.broadcastEvent(null, $"3.{fq}:True", false);
+                            RadioManager.Transmit($"3.{fq}", RadioSignalType.Toggle);
                         }
                         return;
                     }
@@ -396,7 +399,7 @@ namespace Wired
                             }
                             var fq = BitConverter.ToUInt16(metadata, 0);
                             string freq = $"3.{fq}";
-                            NPCEventManager.broadcastEvent(null, $"3.{fq}:True", false);
+                            RadioManager.Transmit($"3.{fq}", RadioSignalType.Toggle);
                         }
                         return;
                     }
@@ -470,7 +473,7 @@ namespace Wired
                 if (drop.model.GetComponent<SupplierNode>() == null)
                     drop.model.gameObject.AddComponent<SupplierNode>();
                 var node = drop.model.GetComponent<SupplierNode>();
-                _nodes[node.instanceID] = node;
+                Nodes[node.instanceID] = node;
                 if (drop.asset.id == 458) // Portable generator
                     node.Supply = 500;
                 if (drop.asset.id == 1230) // Industrial generator
@@ -484,7 +487,7 @@ namespace Wired
                     if (drop.model.GetComponent<TimerNode>() == null)
                         drop.model.gameObject.AddComponent<TimerNode>();
                     var node = drop.model.GetComponent<TimerNode>();
-                    _nodes[node.instanceID] = node;
+                    Nodes[node.instanceID] = node;
                     AssetParser parser = new AssetParser(drop.asset.getFilePath());
                     if (parser.TryGetFloat("Timer_Delay_Seconds", out var val))
                     {
@@ -498,7 +501,7 @@ namespace Wired
                     if (drop.model.GetComponent<SwitchNode>() == null)
                         drop.model.gameObject.AddComponent<SwitchNode>();
                     var node = drop.model.GetComponent<SwitchNode>();
-                    _nodes[node.instanceID] = node;
+                    Nodes[node.instanceID] = node;
                     return;
                 }
                 else if (type == WiredAssetType.RemoteReceiver)
@@ -506,7 +509,7 @@ namespace Wired
                     if (drop.model.GetComponent<ReceiverNode>() == null)
                         drop.model.gameObject.AddComponent<ReceiverNode>();
                     var node = drop.model.GetComponent<ReceiverNode>();
-                    _nodes[node.instanceID] = node;
+                    Nodes[node.instanceID] = node;
                     return;
                 }
                 else if (type == WiredAssetType.RemoteTransmitter)
@@ -518,7 +521,7 @@ namespace Wired
                         drop.model.gameObject.AddComponent<ConsumerNode>();
                     var node = drop.model.GetComponent<ConsumerNode>();
 
-                    _nodes[node.instanceID] = node;
+                    Nodes[node.instanceID] = node;
                     node.SetPowered(false);
                     node.Consumption = 100;
                 }
@@ -529,7 +532,7 @@ namespace Wired
                     drop.model.gameObject.AddComponent<ConsumerNode>();
                 var node = drop.model.GetComponent<ConsumerNode>();
 
-                _nodes[node.instanceID] = node;
+                Nodes[node.instanceID] = node;
                 node.SetPowered(false);
 
                 if (drop.asset.id == 459) // Spotlight
@@ -624,7 +627,7 @@ namespace Wired
             }
 
             uint id = drop.instanceID;
-            if (!_nodes.TryGetValue(id, out var node))
+            if (!Nodes.TryGetValue(id, out var node))
             {
                 Console.WriteLine($"No id in _nodes: {drop.instanceID}");
                 return;
@@ -636,7 +639,7 @@ namespace Wired
             }
 
             node.Connections.Clear();
-            _nodes.Remove(id);
+            Nodes.Remove(id);
             UpdateNodesDisplay(instigatorClient.playerID.steamID);
             UpdateAllNetworks();
             UpdateFarmsAffected();
@@ -772,7 +775,7 @@ namespace Wired
             var stopwatch = Stopwatch.StartNew();
             var visited = new HashSet<IElectricNode>();
 
-            foreach (var node in _nodes.Values)
+            foreach (var node in Nodes.Values)
             {
                 if (visited.Contains(node))
                     continue;

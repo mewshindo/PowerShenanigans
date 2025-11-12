@@ -131,7 +131,7 @@
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Raycast.cs" />
-    <Compile Include="RemoteManager.cs" />
+    <Compile Include="RadioManager.cs" />
     <Compile Include="Resources.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -139,6 +139,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>xcopy /Y "$(TargetPath)" "D:\SteamCMD\steamapps\common\U3DS\Servers\Default\Rocket\Plugins"</PostBuildEvent>
+    <PostBuildEvent>xcopy /Y "$(TargetPath)" "C:\Program Files (x86)\Steam\steamapps\common\U3DS\Servers\Default\Rocket\Plugins"</PostBuildEvent>
   </PropertyGroup>
 </Project>
