@@ -131,6 +131,7 @@
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Raycast.cs" />
+    <Compile Include="RemoteManager.cs" />
     <Compile Include="Resources.cs" />
   </ItemGroup>
   <ItemGroup>
