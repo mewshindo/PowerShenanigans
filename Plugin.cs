@@ -61,7 +61,7 @@ namespace Wired
                     if (barricadeTransform.TryGetComponent<ConsumerNode>(out var c))
                     {
                         c.unInit();
-                        if(Nodes.ContainsKey(c.instanceID))
+                        if (Nodes.ContainsKey(c.instanceID))
                             Nodes.Remove(c.instanceID);
                     }
                 }
@@ -177,7 +177,7 @@ namespace Wired
                             break;
                     }
                 }
-                
+
             }
 
             foreach (BarricadeRegion reg in BarricadeManager.regions)
@@ -342,16 +342,18 @@ namespace Wired
                     return;
                 if (eventId == "Wired:RemoteLeftClick")
                 {
-                    if(instigatingPlayer.equipment.asset.GUID == null)
+                    if (instigatingPlayer.equipment.asset.GUID == null)
                         return;
-                    if(!_resources.WiredAssets.ContainsKey(instigatingPlayer.equipment.asset.GUID) || _resources.WiredAssets[instigatingPlayer.equipment.asset.GUID] != WiredAssetType.RemoteTool)
+                    if (!_resources.WiredAssets.ContainsKey(instigatingPlayer.equipment.asset.GUID) || _resources.WiredAssets[instigatingPlayer.equipment.asset.GUID] != WiredAssetType.RemoteTool)
                         return;
                     BarricadeDrop drop = Raycast.GetBarricade(instigatingPlayer, out _);
                     if (drop == null)
                     {
                         MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
-                        if(metadataEditor.GetMetadata(out byte[] metadata))
+                        if (metadataEditor.GetMetadata(out byte[] metadata))
                         {
+                            if (metadata == null)
+                                return;
                             foreach (byte b in metadata)
                             {
                                 Console.Write(b + " ");
@@ -366,7 +368,7 @@ namespace Wired
                     if (!DoesOwnDrop(drop, instigatingPlayer.channel.owner.playerID.steamID))
                         return;
                     IElectricNode node = drop.model.GetComponent<IElectricNode>();
-                    if(node != null && node is ReceiverNode rr)
+                    if (node != null && node is ReceiverNode rr)
                     {
                         Console.WriteLine($"Tried assigning {rr.Frequency.Substring(2)} to metadata");
                         MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
@@ -393,7 +395,7 @@ namespace Wired
                         MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
                         if (metadataEditor.GetMetadata(out byte[] metadata, 2))
                         {
-                            foreach(byte b in metadata)
+                            foreach (byte b in metadata)
                             {
                                 Console.Write(b + " ");
                             }
@@ -413,7 +415,7 @@ namespace Wired
                         MetadataEditor metadataEditor = new MetadataEditor(instigatingPlayer.equipment);
                         metadataEditor.SetMetadata(uint.Parse(rr.Frequency.Substring(2)), 2);
 
-                        instigatingPlayer.ServerShowHint($"Bound frequency {rr.Frequency} MHz to left click!", 3f);
+                        instigatingPlayer.ServerShowHint($"Bound frequency {rr.Frequency} MHz to right click!", 3f);
 
                         metadataEditor.GetMetadata(out byte[] metadata);
                         foreach (byte b in metadata)
@@ -464,7 +466,7 @@ namespace Wired
 
         private void onBarricadeSpawned(BarricadeRegion region, BarricadeDrop drop)
         {
-            if(drop.model.GetComponent<IElectricNode>() != null)
+            if (drop.model.GetComponent<IElectricNode>() != null)
             {
                 return;
             }
@@ -758,7 +760,7 @@ namespace Wired
                         pathEffect = _resources.path_switch;
                     else if (node is TimerNode || connected is TimerNode)
                         pathEffect = _resources.path_timer;
-                    else if(node is ReceiverNode || connected is ReceiverNode)
+                    else if (node is ReceiverNode || connected is ReceiverNode)
                         pathEffect = _resources.path_switch;
                     else
                         pathEffect = _resources.path_consumer;

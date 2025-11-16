@@ -58,7 +58,6 @@ namespace Wired.Nodes
         }
         public override void SetActive(bool active)
         {
-            base.SetActive(active);
             TransmitSignal(active);
         }
         private void TransmitSignal(bool state)

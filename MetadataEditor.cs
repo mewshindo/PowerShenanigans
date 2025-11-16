@@ -21,27 +21,42 @@ namespace Wired
         {
             metadata = null;
             if (_item == null)
+            {
+                Console.WriteLine($"_item null");
                 return false;
+            }
             var md = _item.metadata.Skip(offset).Take(2).ToArray();
             if (md == null || md.Length == 0)
+            {
+                Console.WriteLine($"md null: {md == null}");
                 return false;
+            }
             metadata = md;
             return true;
         }
         private void SetMetadata(byte[] data, byte offset = 0)
         {
             if (_item == null)
+            {
+                Console.WriteLine("_item null");
                 return;
+            }
+
             for (int i = 0; i < data.Length; i++)
             {
-                if (i + offset >= _item.metadata.Length)
-                    break;
                 _item.metadata[i + offset] = data[i];
             }
         }
         public void SetMetadata(uint value, byte offset = 0)
         {
             var data = BitConverter.GetBytes(value);
+            data.ToList();
+            for(int i = 0; i < offset; i++)
+            {
+                data.Prepend((byte)0);
+            }
+            data.ToArray();
+            _item.metadata = _item.metadata.Concat(data).ToArray();
             SetMetadata(data, offset);
         }
 

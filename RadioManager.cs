@@ -20,16 +20,26 @@ namespace Wired
         {
             List<ReceiverNode> receivers = Plugin.Instance.Nodes.OfType<ReceiverNode>().Where(r => r.Frequency == frequency).ToList();
 
+            ushort touchedreceivers = 0;
             foreach (ReceiverNode receiver in receivers)
             {
-                receiver.SetState(signal);
+                if (receiver.IsOn && signal == RadioSignalType.False || !receiver.IsOn && signal == RadioSignalType.True || signal == RadioSignalType.Toggle)
+                {
+                    receiver.SetState(signal);
+                    touchedreceivers++;
+                }
             }
-            StartCoroutine(DelayedUpdateNetworks());
+            if(touchedreceivers > 0)
+            {
+                StopAllCoroutines();
+                StartCoroutine(DelayedUpdateNetworks());
+            }
         }
         IEnumerator DelayedUpdateNetworks()
         {
             yield return new WaitUntil(() => Plugin.Instance.UpdateFinished);
             Plugin.Instance.UpdateAllNetworks();
+
         }
     }
     public enum RadioSignalType
